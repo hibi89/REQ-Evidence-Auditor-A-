@@ -1,9 +1,5 @@
-# STATUS — REQ Evidence Auditor A
-2026-11-18 KST
-- P0: Detailed final blueprint + frozen contract + SWU DAG + integration/P2 plan authored on design branch.
-- P1: NOT_STARTED; functional SWU candidate count 0/17 (designed queue; actual code audit not executed).
-- P2: NOT_RUN / UNASSESSED; independent security/GUI audit NOT_RUN.
-- Official implementation completion: UNASSESSED; no arbitrary percent.
-- GitHub A = final canonical integration destination; B/C = independent temporary feature workspaces.
-- No main merge, Production, commercial release, external customer data, deployment or repo deletion. Repository Provisioner work parked.
-- Initial central policy SHA: `f633dcf1d3c533d2b674648e4a6515d80b85f05c`; refresh on each subsequent `ㄱ`.
+# STATUS — A Integration (2026-11-18 KST)
+P0: final blueprint (30 REQs), JSON contract and 17 candidate SWUs committed and A/B/C worker branches created.
+A design SHA `e58e14ee4ef84dfc226d657cfe45b1d40cfb9ba9`. B worker SHA `8f40de5cc6265917c457f279469f4e2d064d0a10`; C worker SHA `b5d6b4eaabc95340cfa1ac6cdd80201bfc122773`.
+P1: actual implemented 0/17 SWU candidates (configuration only). Official implementation completion UNASSESSED. P2: NOT_RUN/UNASSESSED.
+Gates: copy only worker-owned code, record exact source SHA and per-file hash, minimal local safety checks, keep main and Production untouched. No deletion of B/C. Next READY A-01/B-01/C-01.

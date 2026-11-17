@@ -1,0 +1,96 @@
+{
+  "schema_version": "reqea.parallel.v1",
+  "as_of_kst": "2026-11-18",
+  "canonical_design": {
+    "repo": "hibi89/REQ-Evidence-Auditor-A-",
+    "branch": "design/reqea-final-blueprint-v1",
+    "sha": "e58e14ee4ef84dfc226d657cfe45b1d40cfb9ba9"
+  },
+  "integration": {
+    "repo": "hibi89/REQ-Evidence-Auditor-A-",
+    "branch": "integration/reqea-p1-20261118",
+    "baseline_sha": "e58e14ee4ef84dfc226d657cfe45b1d40cfb9ba9",
+    "status": "P0_READY_P1_NOT_STARTED"
+  },
+  "contract": {
+    "version": "reqea.v1",
+    "git_blob_sha": "b39d8307662206472f2165b4bce3c0e10e2b62b6",
+    "synchronized": true
+  },
+  "workers": [
+    {
+      "worker": "A",
+      "repo": "hibi89/REQ-Evidence-Auditor-A-",
+      "branch": "feature/reqea-a-core-p1-20261118",
+      "head_sha": "e58e14ee4ef84dfc226d657cfe45b1d40cfb9ba9",
+      "swus": [
+        "A-01",
+        "A-02",
+        "A-03",
+        "A-04",
+        "A-05",
+        "A-06",
+        "A-07"
+      ],
+      "allowed_paths": [
+        "src/reqea/**",
+        "tests/a/**",
+        "docs/**",
+        ".github/**",
+        "pyproject.toml"
+      ],
+      "role": "final design, local core/CLI/GUI, sole integration lead"
+    },
+    {
+      "worker": "B",
+      "repo": "hibi89/REQ-Evidence-Auditor-B-",
+      "branch": "feature/reqea-b-codegraph-p1-20261118",
+      "head_sha": "8f40de5cc6265917c457f279469f4e2d064d0a10",
+      "swus": [
+        "B-01",
+        "B-02",
+        "B-03",
+        "B-04",
+        "B-05"
+      ],
+      "allowed_paths": [
+        "src/reqea_codegraph/**",
+        "tests/b/**"
+      ],
+      "role": "static code graph analysis"
+    },
+    {
+      "worker": "C",
+      "repo": "hibi89/REQ-Evidence-Auditor-C-",
+      "branch": "feature/reqea-c-evidence-p1-20261118",
+      "head_sha": "b5d6b4eaabc95340cfa1ac6cdd80201bfc122773",
+      "swus": [
+        "C-01",
+        "C-02",
+        "C-03",
+        "C-04",
+        "C-05"
+      ],
+      "allowed_paths": [
+        "src/reqea_evidence/**",
+        "tests/c/**"
+      ],
+      "role": "REQ evidence match, conservative findings, JSON/HTML reports"
+    }
+  ],
+  "progress": {
+    "p1_implemented_swus": 0,
+    "p1_planned_swus": 17,
+    "official_implementation": "UNASSESSED",
+    "p2": "NOT_RUN",
+    "speed_effect": "UNMEASURED"
+  },
+  "integration_policy": "copy only B/src/reqea_codegraph/** and tests/b/**; C/src/reqea_evidence/** and tests/c/**; SHA256 and commit refs required",
+  "prohibitions": [
+    "No main merge",
+    "No repo deletion",
+    "No Production",
+    "No public customer source or secrets",
+    "No unrelated project scope"
+  ]
+}
