@@ -1,4 +1,11 @@
 # P2 검증 큐 — P1 완료 후보 이후 실행
+
+## 2026-11-18 KST — P2-05 post-scan Git provenance revalidation (latest)
+- Verified exact source/tests SHA: `5c85455b9ec6d7820da0b14f316cb09991b491fc`, [GitHub Actions run 44287014216](https://github.com/hibi89/REQ-Evidence-Auditor-A-/actions/runs/44287014216) **SUCCESS 6/6 jobs**. Ubuntu: B 4, C 17, integration 3, P2 36 = **57 PASS / 3 SKIP**; Windows Server 2025 **59 PASS / 1 SKIP**. Windows one-file unsigned CLI/GUI EXE, Tk synthetic callback, Bandit, offline Chromium, read-only checkout checks all successful. The one Windows skip is a POSIX-only test from the previous Git fsmonitor fix; Git argument protection has a separate Windows PASS test.
+- P2-05 defect: an initially clean Git source could change during A/B/C indexing while the report still advertised its initial verified HEAD. `src/reqea/core/source_ref.py` adds a fail-closed final HEAD/root/status check; `src/reqea/core/orchestrator.py` drops findings and reports `UNVERIFIED / UNASSESSED` with code `source_snapshot_changed_during_analysis` when a tracked source changes before report completion. New `tests/p2/test_snapshot_consistency.py`: stable SHA retained and synthetic in-scan code mutation detected; both passed on Ubuntu and Windows.
+- No approved P2 gate newly met in full: **P2 reference 2/9 scoped PASS = 22.2% unweighted reference only; 6/9 PARTIAL_PASS; 1/9 NOT_RUN. Official verified acceptance rate UNASSESSED.** Source candidate 17/17 SWU; 30/30 REQ mapped; official weighted implementation UNASSESSED.
+- Not proven: ignored/untracked-under-ignore source provenance, malicious modify-and-revert while Git status checks run, full external hostile directory/lock tamper recovery, real power failure, Windows 11 actual GUI/portable EXE, real manual `workflow_dispatch`, independent security/Codex and Astra GUI audits and High final acceptance. No main merge, Production, release, sensitive input export, privilege changes, or automatic deletion of backups/locks.
+
 **현재 (2026-11-18 KST):** P2 자체 합성·Linux/Windows CI 검증 일부 `PASS/PARTIAL_PASS` (Run 44258446968); 독립 Codex/Astra·Windows 11 실환경·실제 workflow_dispatch는 `NOT_RUN`. 공식 가중 검증완료율 `UNASSESSED`. 상세 증거: [P2 verification report](P2_VERIFICATION_REPORT_20261118.md).
 | ID | 관련 REQ | 테스트 목표 | 위험 | 증거 조건 |
 |---|---|---|---|---|

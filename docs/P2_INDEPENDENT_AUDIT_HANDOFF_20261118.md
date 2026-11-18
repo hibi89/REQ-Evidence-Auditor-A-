@@ -1,26 +1,33 @@
 # REQ Evidence Auditor A — P2 independent-review handoff (2026-11-18 KST)
 
+## 2026-11-18 KST — P2-05 post-scan Git provenance revalidation (latest)
+- Verified exact source/tests SHA: `5c85455b9ec6d7820da0b14f316cb09991b491fc`, [GitHub Actions run 44287014216](https://github.com/hibi89/REQ-Evidence-Auditor-A-/actions/runs/44287014216) **SUCCESS 6/6 jobs**. Ubuntu: B 4, C 17, integration 3, P2 36 = **57 PASS / 3 SKIP**; Windows Server 2025 **59 PASS / 1 SKIP**. Windows one-file unsigned CLI/GUI EXE, Tk synthetic callback, Bandit, offline Chromium, read-only checkout checks all successful. The one Windows skip is a POSIX-only test from the previous Git fsmonitor fix; Git argument protection has a separate Windows PASS test.
+- P2-05 defect: an initially clean Git source could change during A/B/C indexing while the report still advertised its initial verified HEAD. `src/reqea/core/source_ref.py` adds a fail-closed final HEAD/root/status check; `src/reqea/core/orchestrator.py` drops findings and reports `UNVERIFIED / UNASSESSED` with code `source_snapshot_changed_during_analysis` when a tracked source changes before report completion. New `tests/p2/test_snapshot_consistency.py`: stable SHA retained and synthetic in-scan code mutation detected; both passed on Ubuntu and Windows.
+- No approved P2 gate newly met in full: **P2 reference 2/9 scoped PASS = 22.2% unweighted reference only; 6/9 PARTIAL_PASS; 1/9 NOT_RUN. Official verified acceptance rate UNASSESSED.** Source candidate 17/17 SWU; 30/30 REQ mapped; official weighted implementation UNASSESSED.
+- Not proven: ignored/untracked-under-ignore source provenance, malicious modify-and-revert while Git status checks run, full external hostile directory/lock tamper recovery, real power failure, Windows 11 actual GUI/portable EXE, real manual `workflow_dispatch`, independent security/Codex and Astra GUI audits and High final acceptance. No main merge, Production, release, sensitive input export, privilege changes, or automatic deletion of backups/locks.
+
+
 ## Decision: SELF_P2_SCOPED_DONE → INDEPENDENT_REVIEW_READY, NOT product VERIFIED
 A author-side P2 automation, synthetic recovery, cross-platform package, static Bandit, read-only checkout, and offline Chromium checks were executed. Repeating the same author-side test matrix is not a prerequisite for beginning independent review. This is **a workflow handoff**, not acceptance of previously unexecuted gates.
 
 - Authoritative product: `hibi89/REQ-Evidence-Auditor-A-`
 - Integration branch: `integration/reqea-p1-20261118` (**never `main` without separate owner GO**)
-- Latest tested code+tests SHA: `b623b6500f739e36fdc653099e18606f64af49e9` (previous immutable tested baseline: `49b4a207706bfc84a77fc638dcd6a04bf2628323`)
+- Latest tested code+tests SHA: `5c85455b9ec6d7820da0b14f316cb09991b491fc` (previous immutable tested baseline: `49b4a207706bfc84a77fc638dcd6a04bf2628323`)
 - The prior functional guard code was introduced at `32f133cb1ab8203edae7c264bf4de6977612a9f0`.
 - [Latest Actions evidence 44279994485](https://github.com/hibi89/REQ-Evidence-Auditor-A-/actions/runs/44279994485): SUCCESS **6/6 jobs** at latest SHA; Windows Server 2025 **57 PASS / 1 SKIP**, Ubuntu 24.04 **55 PASS / 3 SKIP**, unsigned CLI/GUI EXE CI build and synthetic GUI callbacks, wheel, Bandit, Chromium file://, zero-mutation public checkout PASS. Previous baseline [44267405032](https://github.com/hibi89/REQ-Evidence-Auditor-A-/actions/runs/44267405032) retained as historical evidence.
 - P1 source candidates **17/17 SWU**, requirements mapped **30/30 REQ**. Official *weighted* implementation/verification rates both **UNASSESSED**; not 100% acceptance.
 - P2 9-gate *unweighted reference states*: P2-03 and P2-06 scoped PASS (2); P2-01/02/04/05/07/08 PARTIAL_PASS (6); P2-09 NOT_RUN (1). None may be promoted to full acceptance without relevant independent evidence.
 
 ## 2026-11-18 latest independent-review focus
-- Inspect the newly fixed untrusted `core.fsmonitor` external-process execution vector and `tests/p2/test_git_readonly_safety.py`; original fail-first reproduction was synthetic and local. This author-side fix is **not an independent security signoff**.
-- Code branch HEAD must be refreshed after this documentation-only update; audit the latest tested source SHA `b623b6500f739e36fdc653099e18606f64af49e9`, not the older `49b4a207706bfc84a77fc638dcd6a04bf2628323` baseline alone.
+- Inspect the newly fixed untrusted `core.fsmonitor` external-process execution vector and post-scan Git provenance consistency and `tests/p2/test_git_readonly_safety.py`; original fail-first reproduction was synthetic and local. This author-side fix is **not an independent security signoff**.
+- Code branch HEAD must be refreshed after this documentation-only update; audit the latest tested source SHA `5c85455b9ec6d7820da0b14f316cb09991b491fc`, not the older `49b4a207706bfc84a77fc638dcd6a04bf2628323` baseline alone.
 
 ## Reviewer 1 — Codex technical/security (MODEL_UNVERIFIED until actually launched)
 **Goal:** independent P2 review of immutable source baseline, defects repaired and retested; do not treat author-side CI as an independent audit.
 
 **Instructions to paste into a Codex review session:**
 
-> REQ Evidence Auditor A의 독립 P2 기술·보안 검수자다. `hibi89/REQ-Evidence-Auditor-A-`의 `integration/reqea-p1-20261118`에서 먼저 원격 HEAD와 기준 구현 SHA `b623b6500f739e36fdc653099e18606f64af49e9`를 확인하고 `AGENTS.md`, `docs/FINAL_BLUEPRINT.md`, 고정 `docs/CONTRACT_V1.md`, `docs/P2_VERIFICATION_REPORT_20261118.md` 및 실제 A/B/C 소스를 독립 점검하라. 소스 import/실행·네트워크 전송·고객 원본 업로드 없이 합성 로컬 자료로 탐색 경계, symlink/junction/hardlink, cwd/UNC, race/TOCTOU, 중단된 결과물 3종, `--overwrite` 잠금 소유권·다중 writer, 잘못된 JSON/REQ, 숨김 secret·HTML escaping·CSP·Git SHA provenance·무허가 VERIFIED를 공격적으로 검증하라. P2-01/02/05/08과 30 REQ 계약을 근거별 PASS/FAIL/NOT_RUN으로 구분하라. 결함은 보호된 별도 작업 브랜치에서 실제 수정·국소 재검증·SHA와 함께 보고하되, 원본/권한/고객 자료/외부 전송·main 병합·배포·출시 변경은 사용자 GO 없이 수행하지 말라. 검수 모델/실행/증거가 없으면 NOT_RUN, 스스로 작성한 변경에 대한 자기 확인은 독립 재검수로 오인하지 말라.
+> REQ Evidence Auditor A의 독립 P2 기술·보안 검수자다. `hibi89/REQ-Evidence-Auditor-A-`의 `integration/reqea-p1-20261118`에서 먼저 원격 HEAD와 기준 구현 SHA `5c85455b9ec6d7820da0b14f316cb09991b491fc`를 확인하고 `AGENTS.md`, `docs/FINAL_BLUEPRINT.md`, 고정 `docs/CONTRACT_V1.md`, `docs/P2_VERIFICATION_REPORT_20261118.md` 및 실제 A/B/C 소스를 독립 점검하라. 소스 import/실행·네트워크 전송·고객 원본 업로드 없이 합성 로컬 자료로 탐색 경계, symlink/junction/hardlink, cwd/UNC, race/TOCTOU, 중단된 결과물 3종, `--overwrite` 잠금 소유권·다중 writer, 잘못된 JSON/REQ, 숨김 secret·HTML escaping·CSP·Git SHA provenance·무허가 VERIFIED를 공격적으로 검증하라. P2-01/02/05/08과 30 REQ 계약을 근거별 PASS/FAIL/NOT_RUN으로 구분하라. 결함은 보호된 별도 작업 브랜치에서 실제 수정·국소 재검증·SHA와 함께 보고하되, 원본/권한/고객 자료/외부 전송·main 병합·배포·출시 변경은 사용자 GO 없이 수행하지 말라. 검수 모델/실행/증거가 없으면 NOT_RUN, 스스로 작성한 변경에 대한 자기 확인은 독립 재검수로 오인하지 말라.
 
 **Priority risk:** crash/power-loss group atomicity NOT_PROVEN; external lock deletion/directory replacement race NOT_PROVEN. Existing code intentionally fails closed on an abandoned `.reqea-transaction.lock` or `.reqea-*` remnants. Never remove/recover these automatically; do not accept destructive "fix" that erases original output or recovery backups.
 
