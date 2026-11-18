@@ -94,9 +94,15 @@ def validated_root(root: str) -> Path:
         raise ValueError("root_unavailable") from exc
     if not stat.S_ISDIR(st.st_mode) or _is_reparse(st) or p.is_symlink():
         raise ValueError("root_not_regular_directory")
-    # Symlink ancestors and junctions are not accepted as a selected root.
-    if os.path.normcase(os.path.realpath(p)) != os.path.normcase(os.path.abspath(p)):
-        raise ValueError("root_through_symlink_disallowed")
+    # Inspect real filesystem link/reparse attributes, not realpath string equality:
+    # Windows short names and canonical drive spelling can differ for normal paths.
+    for ancestor in (p, *p.parents):
+        try:
+            mode = ancestor.lstat()
+        except OSError as exc:
+            raise ValueError("root_unavailable") from exc
+        if stat.S_ISLNK(mode.st_mode) or _is_reparse(mode):
+            raise ValueError("root_through_symlink_disallowed")
     return p
 
 
