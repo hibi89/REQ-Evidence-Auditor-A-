@@ -20,8 +20,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         result = build_audit(args.repo, args.requirements, policy_sha=args.policy_sha)
-        if "required_B_or_C_module_unavailable" in result.get("warnings", []):
-            print(json.dumps({"status": "UNASSESSED", "reason": "B_C_NOT_INTEGRATED"}), file=sys.stderr)
+        fatal = {"required_B_or_C_module_unavailable", "B_contract_or_SHA_mismatch",
+                 "C_contract_or_SHA_mismatch", "C_invalid_or_untrusted_status",
+                 "C_invalid_finding_status", "C_invalid_warning_contract",
+                 "analysis_failed_without_verified_evidence"}
+        if fatal.intersection(result.get("warnings", [])):
+            print(json.dumps({"status": "UNASSESSED", "reason": "CONTRACT_OR_MODULE_NOT_READY"}), file=sys.stderr)
             return 3
         report = render_audit_html(result)
         info = save_artifacts(result, report, source_root=args.repo, out_dir=args.out, overwrite=args.overwrite)
