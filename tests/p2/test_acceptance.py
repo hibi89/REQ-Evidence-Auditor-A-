@@ -131,6 +131,22 @@ class P2SyntheticAcceptance(unittest.TestCase):
         self.assertEqual(denied.returncode, 2)
         self.assertFalse((self.root / "nested").exists())
 
+    def test_windows_junction_output_is_refused(self):
+        if sys.platform != "win32":
+            self.skipTest("Windows-only junction")
+        self.fixture(1, 1)
+        destination = self.parent / "junction-target"
+        destination.mkdir()
+        junction = self.parent / "junction-link"
+        mk = subprocess.run(["cmd", "/c", "mklink", "/J", str(junction), str(destination)],
+                            capture_output=True, text=True, timeout=10)
+        if mk.returncode:
+            self.skipTest("Windows junction creation unavailable")
+        audit = build_audit(str(self.root), str(self.req))
+        html = render_audit_html(audit)
+        with self.assertRaises(ValueError):
+            save_artifacts(audit, html, source_root=str(self.root), out_dir=str(junction))
+
     def test_gui_import_smoke_not_live_desktop(self):
         import reqea.gui.app
         self.assertTrue(callable(reqea.gui.app.main))

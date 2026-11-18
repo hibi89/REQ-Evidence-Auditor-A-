@@ -119,5 +119,30 @@ jobs:
               assert (out / "report.html").is_file() and (out / "manifest.json").is_file()
               print("Windows unsigned CLI EXE synthetic audit PASS; GUI EXE built but GUI live automation NOT_RUN")
           PY
+      - name: Windows tkinter GUI event loop (headless, synthetic)
+        shell: bash
+        run: python tests/p2/gui_smoke.py
       - name: Ephemeral only; never upload unsigned EXE or reports
         run: echo "Portable EXE files remain on runner only. No artifact upload or release."
+
+  static-security:
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Medium/high static Python security checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install "bandit==1.8.6"
+          python -m bandit -q -r src -ll
+      - name: Security findings are not an independent human audit
+        run: echo "Bandit medium/high static scan only. Manual threat modeling and independent review NOT_RUN."

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import re
+import stat
 import subprocess
 from pathlib import Path
 
@@ -11,16 +12,17 @@ _DENIED = {".git", ".ssh", "node_modules", ".venv", "venv", "__pycache__", "secr
 
 
 def _safe_path(path: Path) -> None:
-    if path.is_symlink():
-        raise ValueError("symlink path is not permitted")
+    reparse = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
     for part in path.parts:
         if part.lower() in _DENIED or part.lower().startswith(".env"):
             raise ValueError("protected input path is not permitted")
-    ancestor = path.parent
-    while ancestor != ancestor.parent:
-        if ancestor.is_symlink():
-            raise ValueError("symlink ancestor is not permitted")
-        ancestor = ancestor.parent
+    for part in (path, *path.parents):
+        try:
+            info = part.lstat()
+        except FileNotFoundError:
+            continue
+        if stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & reparse:
+            raise ValueError("input symlink or junction path is not permitted")
 
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:

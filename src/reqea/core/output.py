@@ -5,14 +5,21 @@ import hashlib
 import json
 import os
 import re
+import stat
 import tempfile
 from pathlib import Path
 
 
 def _check_no_symlinks(path: Path) -> None:
+    """Reject symlinks and Windows junction/reparse ancestors, even at destination."""
+    reparse = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
     for part in (path, *path.parents):
-        if part.is_symlink():
-            raise ValueError("output symlink path is prohibited")
+        try:
+            info = part.lstat()
+        except FileNotFoundError:
+            continue  # Destination need not exist yet.
+        if stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & reparse:
+            raise ValueError("output symlink or junction path is prohibited")
 
 
 def save_artifacts(audit: dict, html: str, *, source_root: str, out_dir: str,
