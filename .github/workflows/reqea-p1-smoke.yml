@@ -26,6 +26,7 @@ jobs:
           set -euo pipefail
           python -m compileall -q src
           export PYTHONPATH="$GITHUB_WORKSPACE/src"
+          PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s tests/integration -v
           python - <<'PY'
           import json, os, subprocess, sys, tempfile
           from pathlib import Path
