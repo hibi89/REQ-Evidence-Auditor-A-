@@ -1,6 +1,7 @@
 """Validate local read-only input provenance, without traversing or executing source."""
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import stat
@@ -80,10 +81,14 @@ def inspect_local_source(repo_root: str, requirements_path: str, *, baseline_sha
             source_sha = candidate
     else:
         warnings.append("git_head_unavailable_or_nested_root")
-    return {"schema_version": "reqea.v1", "source_sha": source_sha,
-            "source_document": relative, "root": str(root), "requirements_path": str(req),
-            "_requirements_identity": _file_identity(req_meta),
-            "warnings": sorted(set(warnings))}
+    result = {"schema_version": "reqea.v1", "source_sha": source_sha,
+              "source_document": relative, "root": str(root), "requirements_path": str(req),
+              "_requirements_identity": _file_identity(req_meta),
+              "warnings": sorted(set(warnings))}
+    # Bind the later parser read to these exact bytes as well as filesystem IDs.
+    # Some Windows metadata aliases cannot reliably detect a same-sized rename.
+    result["_requirements_digest"] = hashlib.sha256(read_checked_requirements(result)).digest()
+    return result
 
 
 
@@ -138,4 +143,7 @@ def read_checked_requirements(source: dict) -> bytes:
         raise ValueError("requirements changed during read")
     if len(data) > 2_000_000:
         raise ValueError("requirements too large")
+    expected_digest = source.get("_requirements_digest")
+    if expected_digest is not None and hashlib.sha256(data).digest() != expected_digest:
+        raise ValueError("requirements contents changed during audit")
     return data

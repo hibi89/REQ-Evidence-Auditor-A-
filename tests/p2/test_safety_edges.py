@@ -84,24 +84,16 @@ class P2SafetyEdges(unittest.TestCase):
         self.assertNotIn("SECRET_CANARY_123", json.dumps(index))
         self.assertTrue(any("link_skipped" in w for w in index["warnings"]))
 
-    def test_requirement_inode_swap_before_open_fails_closed(self):
-        """Swap same-sized input to a different inode after initial validation."""
-        from reqea.core import source_ref
-        original_open = os.open
-        swapped = False
+    def test_requirement_inode_or_bytes_swap_before_read_fails_closed(self):
+        """Same-sized replacement after inspection cannot be parsed as the old REQ."""
+        from reqea.core.source_ref import read_checked_requirements
+        original_bytes = self.req.read_bytes()
+        inspected = inspect_local_source(str(self.root), str(self.req))
         replacement = self.root / "replacement.md"
-        content = self.req.read_bytes()
-        replacement.write_bytes(b"Z" * len(content))
-        def swap_before_open(path, flags, *args, **kwargs):
-            nonlocal swapped
-            if not swapped and Path(path) == self.req:
-                swapped = True
-                os.replace(replacement, self.req)
-            return original_open(path, flags, *args, **kwargs)
-        with patch.object(source_ref.os, "open", side_effect=swap_before_open):
-            with self.assertRaises(ValueError):
-                build_audit(str(self.root), str(self.req))
-        self.assertTrue(swapped)
+        replacement.write_bytes(b"Z" * len(original_bytes))
+        os.replace(replacement, self.req)
+        with self.assertRaises(ValueError):
+            read_checked_requirements(inspected)
 
     def test_requirement_read_only_same_inode_is_stable(self):
         from reqea.core.source_ref import read_checked_requirements
