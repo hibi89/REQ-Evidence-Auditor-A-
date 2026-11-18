@@ -12,3 +12,10 @@ Date: 2026-11-18 15:44 KST. Owner: A integration lead. Product `hibi89/REQ-Evide
 - Remaining P1 READY: none in agreed 17-SWU DAG, unless user changes scope or P2 discovers defects.
 - Next: user supplies planned separate verification prompt. No main merge, release, permissions, data transfer, B/C deletion.
 - Time: A start 15:08:51, B 15:07→15:19, C 15:08:52→15:25:43, integration smoke merge 15:41:06 KST. Serial-vs-parallel speed `UNMEASURED`; no inferred acceleration multiplier.
+
+## 2026-11-18 최신 B/C 코드 동기화 및 A 갭 수정 (P1 인계 확장)
+- Final substantive A integration source SHA `2fbcdbad353f7ea051e968b42bfe18b73a98e32c`; status and summary documents committed later. All 17 SWU candidates remain `IMPLEMENTED_UNVERIFIED`; REQ mapping all 30 present, official percentage `UNASSESSED`.
+- B code SHA `4ffaa0e5c7278acd28f20813fe08d669f64753f0` from B HEAD `f9a94c26db445badae6c6e476eb6d40246f9ff4c`; C code SHA `1907d5e1a1612d92cc2213354bf6938a185c2bd5` from C HEAD `c66fa81044a5804fe8ef94049905e8c7c833cdf3`. SHA256 manifest 13/13 verified; changed B/C files copied 6/6. Specific manifests/paths in `docs/INTEGRATION_LOG.md`.
+- Latest B/C source corrections: warning fanout capped+truncated, exact REQ identifier matching and inconsistent index scanned-file counts. A: Markdown table acceptance/UTF-8 refs and provenance metadata in manifest/HTML.
+- Tests: original A/B/C integrated synthetic 3/3 PASS on **older** code SHA. B updated 4/4, C updated 17/17 local worker PASS, A local mirrored parser/output checks PASS. **Latest full A/B/C cross-module run NOT_RUN**. All P2 full CI/Windows EXE/GUI/security/regression/independent audit NOT_RUN and remain separately gated.
+- No main, Production, release or deletion. A starts 15:08:51 KST, B 15:07 KST, C 15:08:52 KST; completion timestamp = report update commit. Serial comparison `UNMEASURED`.
