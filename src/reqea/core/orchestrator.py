@@ -42,6 +42,9 @@ def build_audit(root: str, requirements: str, *, policy_sha: str = "UNVERIFIED")
     manifest = parser(text, source_document=source["source_document"],
                       source_sha=sha, policy_sha=policy_sha)
     warnings = list(source["warnings"]) + list(manifest["warnings"])
+    if policy_sha == "UNVERIFIED":
+        manifest.pop("policy_sha", None)  # C requires a valid pinned SHA when present
+        warnings.append("policy_sha_unverified")
     try:
         indexer = import_module("reqea_codegraph").build_code_index
         evidence = import_module("reqea_evidence").evaluate
