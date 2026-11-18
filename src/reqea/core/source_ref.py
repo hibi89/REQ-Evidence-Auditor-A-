@@ -6,6 +6,7 @@ import os
 import re
 import stat
 import subprocess
+import sys
 from pathlib import Path
 
 _SHA = re.compile(r"[0-9a-f]{40}\Z")
@@ -156,6 +157,45 @@ def _file_identity(st: os.stat_result) -> tuple[int, int, int, int]:
     return (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns)
 
 
+def _assert_windows_requirement_handle_in_root(root: Path, path: Path, fd: int) -> None:
+    """Reject a Windows requirement file opened via a swapped junction.
+
+    File identity alone can remain unchanged after an ancestor directory is
+    moved out of the selected tree and replaced with a junction. Refuse to
+    read source requirements until the opened HANDLE's final path matches
+    the expected path under the canonical selected root. The requirements
+    reader remains independent from the optional B code-index module.
+    """
+    if sys.platform != "win32":
+        return
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    fn = ctypes.WinDLL("kernel32", use_last_error=True).GetFinalPathNameByHandleW
+    fn.argtypes = [wintypes.HANDLE, wintypes.LPWSTR, wintypes.DWORD, wintypes.DWORD]
+    fn.restype = wintypes.DWORD
+    try:
+        buffer = ctypes.create_unicode_buffer(32768)
+        length = fn(wintypes.HANDLE(msvcrt.get_osfhandle(fd)), buffer, len(buffer), 0)
+        if length == 0 or length >= len(buffer):
+            raise ValueError("windows_requirement_handle_provenance_unavailable")
+        actual = buffer.value
+        prefix = "\\\\?\\"
+        if not actual.startswith(prefix):
+            raise ValueError("windows_requirement_handle_provenance_unavailable")
+        actual = actual[len(prefix):]
+        if len(actual) < 3 or actual[1:3] != ":\\":
+            raise ValueError("windows_requirement_handle_provenance_unavailable")
+        relative = path.relative_to(root)
+        selected_root = os.path.realpath(root)
+        expected = os.path.normcase(os.path.abspath(Path(selected_root) / relative))
+        if os.path.normcase(os.path.normpath(actual)) != expected:
+            raise ValueError("requirements changed during open")
+    except (OSError, TypeError, OverflowError) as exc:
+        raise ValueError("windows_requirement_handle_provenance_unavailable") from exc
+
+
 def read_checked_requirements(source: dict) -> bytes:
     """Read a bounded exact input handle, refusing replacement after provenance check.
 
@@ -183,6 +223,7 @@ def read_checked_requirements(source: dict) -> bytes:
     except OSError as exc:
         raise ValueError("requirements could not be safely opened") from exc
     try:
+        _assert_windows_requirement_handle_in_root(root, path, fd)
         opened = os.fstat(fd)
         if not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1 or (
                 _file_identity(opened) != expected):

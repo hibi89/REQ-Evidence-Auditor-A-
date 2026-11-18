@@ -95,6 +95,41 @@ class P2SafetyEdges(unittest.TestCase):
         with self.assertRaises(ValueError):
             read_checked_requirements(inspected)
 
+    @unittest.skipUnless(sys.platform == "win32", "Win32 junction handle check")
+    def test_windows_requirement_swap_blocks_before_reading_external_inode(self):
+        from reqea.core.source_ref import read_checked_requirements
+        folder = self.root / "nested"
+        folder.mkdir()
+        req = folder / "actual.md"
+        payload = b"# REQ-001 synthetic\nAcceptance criteria:\n- local only\n"
+        req.write_bytes(payload)
+        inspected = inspect_local_source(str(self.root), str(req))
+        relocated = self.base / "outside-moved-source"
+        original_open = os.open
+        switched = False
+
+        def switch_while_opening(path, flags, *args, **kwargs):
+            nonlocal switched
+            if not switched and str(path).endswith("actual.md"):
+                switched = True
+                folder.rename(relocated)
+                mk = subprocess.run(["cmd", "/c", "mklink", "/J", str(folder), str(relocated)],
+                                    capture_output=True, text=True, timeout=15)
+                if mk.returncode:
+                    raise RuntimeError("synthetic junction creation failed: " + mk.stderr)
+            return original_open(path, flags, *args, **kwargs)
+
+        with patch("reqea.core.source_ref.os.open", side_effect=switch_while_opening):
+            with patch("reqea.core.source_ref.os.fdopen",
+                       side_effect=AssertionError("external source read before handle check")) as opened:
+                with self.assertRaisesRegex(ValueError, "requirements changed during open"):
+                    read_checked_requirements(inspected)
+                opened.assert_not_called()
+        self.assertTrue(switched)
+        self.assertEqual((relocated / "actual.md").read_bytes(), payload)
+        self.assertTrue(folder.lstat().st_file_attributes & __import__("stat").FILE_ATTRIBUTE_REPARSE_POINT)
+        folder.rmdir()
+
     def test_requirement_read_only_same_inode_is_stable(self):
         from reqea.core.source_ref import read_checked_requirements
         info = inspect_local_source(str(self.root), str(self.req))
