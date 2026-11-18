@@ -30,6 +30,32 @@ jobs:
           set -euo pipefail
           git rev-parse HEAD
           python -m compileall -q src tests
+      - name: Windows synthetic handle identity diagnostic
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os, stat, tempfile
+          from pathlib import Path
+          from reqea_codegraph.walk import scan_tree
+          from reqea_codegraph.files import read_file
+          with tempfile.TemporaryDirectory() as d:
+              p = Path(d) / "probe.py"
+              p.write_text("def test(): return 1", encoding="utf-8")
+              scan = scan_tree(d, {})
+              print("entries:", len(scan.files))
+              if scan.files:
+                  entry = scan.files[0]
+                  before = p.lstat()
+                  fd = os.open(p, os.O_RDONLY | getattr(os, "O_BINARY", 0))
+                  try: opened = os.fstat(fd)
+                  finally: os.close(fd)
+                  print("entry dev/ino/size:", entry.device, entry.inode, entry.size)
+                  print("lstat dev/ino/size/links:", before.st_dev, before.st_ino, before.st_size, before.st_nlink)
+                  print("fstat dev/ino/size/links:", opened.st_dev, opened.st_ino, opened.st_size, opened.st_nlink)
+                  try: print("read bytes:", read_file(Path(d), entry, 100).record["bytes"])
+                  except ValueError as e: print("read rejection:", type(e).__name__, str(e))
+          PY
       - name: B C A and P2 complete synthetic suites
         shell: bash
         run: |
