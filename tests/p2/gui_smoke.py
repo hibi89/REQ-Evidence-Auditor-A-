@@ -22,7 +22,9 @@ with tempfile.TemporaryDirectory() as d:
         limit = time.monotonic() + 20
         while time.monotonic() < limit:
             app.update()
-            if (out / "audit.json").exists() and str(app.start_button.cget("state")) != "disabled":
+            # A worker writes audit.json before the Tk queue polls its final
+            # success message; wait for the observable UI acknowledgement.
+            if (out / "audit.json").is_file() and "저장:" in app.status_text.get():
                 break
             time.sleep(0.05)
         assert (out / "audit.json").is_file(), "GUI did not write audit.json"
