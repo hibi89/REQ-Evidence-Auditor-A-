@@ -76,6 +76,8 @@ jobs:
     needs: test
     runs-on: windows-2025
     timeout-minutes: 25
+    env:
+      PYTHONPATH: src
     permissions:
       contents: read
     steps:
