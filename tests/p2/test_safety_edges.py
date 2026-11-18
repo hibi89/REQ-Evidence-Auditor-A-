@@ -59,7 +59,12 @@ class P2SafetyEdges(unittest.TestCase):
 
     def test_source_file_permission_error_isolated_and_report_incomplete(self):
         original = self.source.read_bytes()
-        with patch("reqea_codegraph.files.os.open", side_effect=PermissionError("synthetic")):
+        original_open = os.open
+        def deny_python_only(path, flags, *args, **kwargs):
+            if str(path).endswith("app.py"):
+                raise PermissionError("synthetic")
+            return original_open(path, flags, *args, **kwargs)
+        with patch("reqea_codegraph.files.os.open", side_effect=deny_python_only):
             index = build_code_index(str(self.root), {})
         self.assertTrue(index["limits"]["truncated"])
         self.assertEqual(index["limits"]["scanned_files"], 1)  # the REQ file remains readable

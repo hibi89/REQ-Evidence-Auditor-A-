@@ -56,7 +56,12 @@ def inspect_local_source(repo_root: str, requirements_path: str, *, baseline_sha
         raise ValueError("requirements file must be inside source root") from exc
     if not relative or any(part in _DENIED or part.startswith(".env") for part in relative.lower().split("/")):
         raise ValueError("protected requirements path")
-    if req.stat().st_size > 2_000_000:
+    req_meta = req.stat()
+    # Requirements are an explicit trust input: reject hardlinks to files outside
+    # the selected tree before parsing potentially private contents.
+    if req_meta.st_nlink > 1 or not stat.S_ISREG(req_meta.st_mode):
+        raise ValueError("hardlinked or nonregular requirements file is prohibited")
+    if req_meta.st_size > 2_000_000:
         raise ValueError("requirements file exceeds 2 MB limit")
     if baseline_sha is not None and (not isinstance(baseline_sha, str) or not _SHA.fullmatch(baseline_sha.lower())):
         raise ValueError("baseline_sha must be a 40-hex commit")
