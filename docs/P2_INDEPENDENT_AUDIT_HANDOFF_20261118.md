@@ -1,5 +1,12 @@
 # REQ Evidence Auditor A — P2 independent-review handoff (2026-11-18 KST)
 
+## 2026-11-18 KST — P2-02 output lock owner-swap protection (latest)
+- **Verified exact source/tests SHA:** `355551ab12079d0b06ad91d11b5cef5a4c5781a8`; [Actions run 44290320754](https://github.com/hibi89/REQ-Evidence-Auditor-A-/actions/runs/44290320754) **SUCCESS 6/6 jobs**. Ubuntu 24.04 **61 PASS / 3 SKIP**, Windows Server 2025 **62 PASS / 2 SKIP** (B 4 + C 17 + integration 3 + P2 40 each). Wheel, Windows unsigned CLI/GUI EXE synthetic, Bandit, offline Chromium and zero-mutation checkout PASS.
+- **Actual change:** `src/reqea/core/output.py` now checks its own transaction lock directory identity before/during artifact operations, and never deletes a replaced foreign lock or clears recovery evidence if ownership changes. The synthetic `tests/p2/test_output_lock_ownership.py` swaps the lock after the first write (both no-clobber and `--overwrite`); the attempted write fails closed, foreign lock remains, and an existing original audit backup survives. Both cases PASS on Ubuntu and Windows Server.
+- **Scope limit:** identity rechecks do not prove full hostile race atomicity, safe handling of every output-directory swap, unexpected external writer, power-loss durability or automatic restart recovery. Windows 11 GUI/EXE manual use and live `workflow_dispatch` are **NOT_RUN**. Independent Codex technical/security review, Astra UI/UX review, and High final signoff **NOT_RUN/HOLD**. Original files and backups not deleted; no main merge, Production, or release.
+- **P2 reference counts:** 2/9 scoped PASS (22.2%, unweighted helper only), 6/9 PARTIAL_PASS, 1/9 NOT_RUN; **official verified acceptance rate UNASSESSED**, not 100%. P1 code candidates 17/17 SWU; 30/30 REQ mapped, official weighted P1 UNASSESSED.
+
+
 ## 2026-11-18 KST — P2-02 synthetic ancestor directory-swap guard; exact-source verification
 - **Tested product/tests SHA** `2e770699e58359a41370a3f847a48f08dc48a9bf`; [Actions Run 44288900355](https://github.com/hibi89/REQ-Evidence-Auditor-A-/actions/runs/44288900355) completed **SUCCESS 6/6 jobs**. Ubuntu 24.04: **59 PASS / 3 SKIP**, Windows Server 2025: **60 PASS / 2 SKIP** (per-OS B 4 + C 17 + integration 3 + P2 38 = 62 invocations). Python/wheel, unsigned Windows CLI/GUI EXE synthetic, Tk callback, Bandit, offline Chromium and read-only checkout passed.
 - P2-02 source `src/reqea_codegraph/files.py`: on POSIX with supported `dir_fd`, open the absolute root ancestor chain and each source-parent directory using no-follow directory handles, then open the file relative to the final trusted directory handle. Revalidate source components and dev/inode/size before returning decoded text. This closes a race where a renamed directory could be replaced by a symlink to the same inode outside the user-selected root and still pass an old pre-open identity check. Windows behavior remains conservative with path checks; native Windows hostile rename/junction atomicity is **NOT_PROVEN**.
@@ -20,7 +27,7 @@ A author-side P2 automation, synthetic recovery, cross-platform package, static 
 
 - Authoritative product: `hibi89/REQ-Evidence-Auditor-A-`
 - Integration branch: `integration/reqea-p1-20261118` (**never `main` without separate owner GO**)
-- Latest tested code+tests SHA: `2e770699e58359a41370a3f847a48f08dc48a9bf` (previous immutable tested baseline: `49b4a207706bfc84a77fc638dcd6a04bf2628323`)
+- Latest tested code+tests SHA: `355551ab12079d0b06ad91d11b5cef5a4c5781a8` (previous immutable tested baseline: `49b4a207706bfc84a77fc638dcd6a04bf2628323`)
 - The prior functional guard code was introduced at `32f133cb1ab8203edae7c264bf4de6977612a9f0`.
 - [Latest Actions evidence 44279994485](https://github.com/hibi89/REQ-Evidence-Auditor-A-/actions/runs/44279994485): SUCCESS **6/6 jobs** at latest SHA; Windows Server 2025 **57 PASS / 1 SKIP**, Ubuntu 24.04 **55 PASS / 3 SKIP**, unsigned CLI/GUI EXE CI build and synthetic GUI callbacks, wheel, Bandit, Chromium file://, zero-mutation public checkout PASS. Previous baseline [44267405032](https://github.com/hibi89/REQ-Evidence-Auditor-A-/actions/runs/44267405032) retained as historical evidence.
 - P1 source candidates **17/17 SWU**, requirements mapped **30/30 REQ**. Official *weighted* implementation/verification rates both **UNASSESSED**; not 100% acceptance.
