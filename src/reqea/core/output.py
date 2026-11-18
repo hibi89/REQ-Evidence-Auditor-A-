@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import tempfile
 from pathlib import Path
 
@@ -35,6 +36,15 @@ def save_artifacts(audit: dict, html: str, *, source_root: str, out_dir: str,
                 "tool_version": audit.get("tool_version", "0.1.0-p1"),
                 "verification_status": "NOT_RUN", "artifacts":
                 {name: hashlib.sha256(data).hexdigest() for name, data in sorted(files.items())}}
+    # Manifest carries sanitized warning codes, not arbitrary source paths or values.
+    raw_warnings = audit.get("warnings", [])
+    if not isinstance(raw_warnings, list):
+        raise ValueError("invalid audit warnings contract")
+    manifest["status"] = audit.get("status", "UNASSESSED")
+    manifest["warnings"] = sorted({
+        re.sub(r"[^A-Za-z0-9_]", "_", w.split(":", 1)[0])[:64]
+        for w in raw_warnings if isinstance(w, str)
+    })[:2049]
     files["manifest.json"] = (json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
     if destination.exists() and not destination.is_dir():
         raise ValueError("output is not a directory")
