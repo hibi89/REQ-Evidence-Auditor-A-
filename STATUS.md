@@ -8,3 +8,8 @@
 - Remaining P2: real Windows 11 GUI/EXE manual use, full crash/recovery/race coverage, actual manual workflow_dispatch, independent Codex technical/security and Astra UI/UX audits, High acceptance. Main/Production/release HOLD.
 - Exact CI job IDs, source SHA and limitations: `docs/P2_VERIFICATION_REPORT_20261118.md`. A documentation-only commit after `c36ba2ec0e14214f2637c57ce716c31b3756a2c9` is not a new verified product-source SHA.
 - No customer data export, privilege change, release, unsigned EXE publication or main merge.
+
+## P2 current verification addition — 2026-11-18 KST
+- New exact verified product source `32f133cb1ab8203edae7c264bf4de6977612a9f0`; [Actions 44266186783](https://github.com/hibi89/REQ-Evidence-Auditor-A-/actions/runs/44266186783) SUCCESS **6/6**: Windows Server CI 54 PASS; Linux 51 PASS + 3 OS SKIP. Three added interrupted-lock/recovery-blocker tests passed on both runner OSes.
+- `src/reqea/core/output.py`: cooperative concurrent writes and interrupted/stale lock or backup detected and blocked. Original data preserved in synthetic exception tests. **Crash atomicity, hostile external race, automatic restart recovery remain NOT_RUN.**
+- P2 reference counts remain 2/9 scoped PASS, 6/9 PARTIAL, 1/9 NOT_RUN; official weighted verification **UNASSESSED**. 17/17 P1 code candidates; official implementation weighted UNASSESSED. Real Windows 11 manual GUI, manual dispatch, independent Codex/Astra and final acceptance NOT_RUN, release/main HOLD.
