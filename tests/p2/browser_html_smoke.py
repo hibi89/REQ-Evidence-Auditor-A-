@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
 import tempfile
 
 from playwright.sync_api import sync_playwright
@@ -36,7 +37,9 @@ with tempfile.TemporaryDirectory() as folder:
     report = out / "report.html"
 
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True)
+        chrome = (shutil.which("google-chrome") or shutil.which("chromium")
+                  or shutil.which("chromium-browser"))
+        browser = pw.chromium.launch(headless=True, executable_path=chrome)
         context = browser.new_context()
         attempts: list[str] = []
         context.route("http://**/*", lambda route: route.abort())

@@ -202,12 +202,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install pinned Chromium test runtime
+      - name: Install pinned browser driver, reuse runner Chrome
         shell: bash
         run: |
           set -euo pipefail
           python -m pip install "playwright==1.56.0"
-          python -m playwright install --with-deps chromium
+          if command -v google-chrome >/dev/null || command -v chromium >/dev/null || command -v chromium-browser >/dev/null; then
+            echo "Reusing preinstalled Ubuntu runner Chromium-family browser"
+          else
+            python -m playwright install chromium
+          fi
       - name: Verify offline report in headless Chromium
         shell: bash
         run: |
