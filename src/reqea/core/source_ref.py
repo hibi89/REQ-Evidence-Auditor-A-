@@ -56,7 +56,7 @@ def inspect_local_source(repo_root: str, requirements_path: str, *, baseline_sha
         raise ValueError("requirements file must be inside source root") from exc
     if not relative or any(part in _DENIED or part.startswith(".env") for part in relative.lower().split("/")):
         raise ValueError("protected requirements path")
-    req_meta = req.stat()
+    req_meta = req.lstat()
     # Requirements are an explicit trust input: reject hardlinks to files outside
     # the selected tree before parsing potentially private contents.
     if req_meta.st_nlink > 1 or not stat.S_ISREG(req_meta.st_mode):
@@ -82,4 +82,60 @@ def inspect_local_source(repo_root: str, requirements_path: str, *, baseline_sha
         warnings.append("git_head_unavailable_or_nested_root")
     return {"schema_version": "reqea.v1", "source_sha": source_sha,
             "source_document": relative, "root": str(root), "requirements_path": str(req),
+            "_requirements_identity": _file_identity(req_meta),
             "warnings": sorted(set(warnings))}
+
+
+
+def _file_identity(st: os.stat_result) -> tuple[int, int, int, int]:
+    """Device, inode, byte count and nanosecond write time of a trusted regular file."""
+    return (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns)
+
+
+def read_checked_requirements(source: dict) -> bytes:
+    """Read a bounded exact input handle, refusing replacement after provenance check.
+
+    Never import, execute, follow a newly inserted link, or read a changed inode.
+    A concurrent rename/overwrite forces an explicit failed audit rather than
+    silently attributing different REQ bytes to the original source SHA.
+    """
+    path = Path(source["requirements_path"])
+    root = Path(source["root"])
+    expected = source.get("_requirements_identity")
+    if not isinstance(expected, tuple) or len(expected) != 4:
+        raise ValueError("requirements identity is unavailable")
+    try:
+        path.relative_to(root)
+        _safe_path(path)
+        before_path = path.lstat()
+    except (OSError, ValueError) as exc:
+        raise ValueError("requirements path changed before read") from exc
+    if not stat.S_ISREG(before_path.st_mode) or before_path.st_nlink != 1 or (
+            _file_identity(before_path) != expected):
+        raise ValueError("requirements changed before read")
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, flags)
+    except OSError as exc:
+        raise ValueError("requirements could not be safely opened") from exc
+    try:
+        opened = os.fstat(fd)
+        if not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1 or (
+                _file_identity(opened) != expected):
+            raise ValueError("requirements identity changed during open")
+        with os.fdopen(fd, "rb", closefd=False) as stream:
+            data = stream.read(2_000_001)
+        after = os.fstat(fd)
+    finally:
+        os.close(fd)
+    _safe_path(path)
+    try:
+        now = path.lstat()
+    except OSError as exc:
+        raise ValueError("requirements vanished during read") from exc
+    if (_file_identity(after) != expected or _file_identity(now) != expected
+            or not stat.S_ISREG(now.st_mode) or now.st_nlink != 1):
+        raise ValueError("requirements changed during read")
+    if len(data) > 2_000_000:
+        raise ValueError("requirements too large")
+    return data

@@ -6,7 +6,7 @@ from html import escape
 from pathlib import Path
 from .requirements_md import parse_markdown_requirements
 from .requirements_json import parse_json_requirements
-from .source_ref import inspect_local_source
+from .source_ref import inspect_local_source, read_checked_requirements
 
 VERSION = "reqea.v1"
 TOOL_VERSION = "0.1.0-p1"
@@ -30,11 +30,9 @@ def build_audit(root: str, requirements: str, *, policy_sha: str = "UNVERIFIED")
     ext = Path(source["requirements_path"]).suffix.lower()
     if ext not in (".md", ".markdown", ".json"):
         raise ValueError("unsupported requirements extension")
-    # Already bounded in source_ref; consume with a strict size cap.
-    with open(source["requirements_path"], "rb") as stream:
-        raw = stream.read(2_000_001)
-    if len(raw) > 2_000_000:
-        raise ValueError("requirements too large")
+    # The inspected inode/size/time must remain identical from validation
+    # through the actual handle read; never follow an injected path redirect.
+    raw = read_checked_requirements(source)
     try:
         text = raw.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
