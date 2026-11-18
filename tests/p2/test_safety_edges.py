@@ -95,6 +95,46 @@ class P2SafetyEdges(unittest.TestCase):
         with self.assertRaises(ValueError):
             read_checked_requirements(inspected)
 
+    @unittest.skipUnless(
+        os.name == "posix"
+        and os.open in getattr(os, "supports_dir_fd", set())
+        and hasattr(os, "O_NOFOLLOW") and hasattr(os, "O_DIRECTORY"),
+        "POSIX no-follow ancestor handles required",
+    )
+    def test_posix_requirement_parent_swap_never_reads_outside_root(self):
+        """A renamed parent replaced by a symlink must be blocked before fdopen."""
+        from reqea.core.source_ref import inspect_local_source, read_checked_requirements
+        folder = self.root / "nested"
+        folder.mkdir()
+        req = folder / "actual.md"
+        payload = b"# REQ-001 synthetic\\nAcceptance criteria:\\n- local only\\n".replace(b"\\n", b"\n")
+        req.write_bytes(payload)
+        inspected = inspect_local_source(str(self.root), str(req))
+        relocated = self.base / "moved-req-outside-root"
+        original_open = os.open
+        switched = False
+
+        def swap_before_parent_or_leaf(path, flags, *args, **kwargs):
+            nonlocal switched
+            if (not switched and (
+                (str(path) == "nested" and kwargs.get("dir_fd") is not None)
+                or str(path) == str(req)
+            )):
+                switched = True
+                folder.rename(relocated)
+                folder.symlink_to(relocated, target_is_directory=True)
+            return original_open(path, flags, *args, **kwargs)
+
+        with patch("reqea.core.source_ref.os.open", side_effect=swap_before_parent_or_leaf):
+            with patch("reqea.core.source_ref.os.fdopen",
+                       side_effect=AssertionError("out-of-root requirement read")) as reader:
+                with self.assertRaisesRegex(ValueError, "requirements could not be safely opened"):
+                    read_checked_requirements(inspected)
+                reader.assert_not_called()
+        self.assertTrue(switched, "race injection must exercise the leaf open boundary")
+        self.assertEqual((relocated / "actual.md").read_bytes(), payload)
+        self.assertTrue(folder.is_symlink())
+
     @unittest.skipUnless(sys.platform == "win32", "Win32 junction handle check")
     def test_windows_requirement_swap_blocks_before_reading_external_inode(self):
         from reqea.core.source_ref import read_checked_requirements

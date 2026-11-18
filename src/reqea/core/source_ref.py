@@ -206,6 +206,43 @@ def _assert_windows_requirement_handle_in_root(root: Path, path: Path, fd: int) 
         raise ValueError("windows_requirement_handle_provenance_unavailable") from exc
 
 
+# Cache platform capability before any race-test interception of os.open.
+_POSIX_ANCHORED_REQUIREMENT_OPEN = (
+    os.name == "posix"
+    and os.open in getattr(os, "supports_dir_fd", set())
+    and hasattr(os, "O_NOFOLLOW") and hasattr(os, "O_DIRECTORY")
+)
+
+
+def _open_requirements_without_parent_links(root: Path, path: Path, flags: int) -> int:
+    """Open requirements through no-follow ancestor handles on POSIX.
+
+    A pre-open lstat is not sufficient: an attacker can rename a parent and
+    insert a symlink before os.open. Keep every ancestor as an opened directory
+    and refuse links before obtaining the leaf descriptor. On Windows the
+    existing Win32 opened-HANDLE final-path verification remains authoritative.
+    """
+    if os.name != "posix":
+        return os.open(path, flags)
+    if not _POSIX_ANCHORED_REQUIREMENT_OPEN:
+        raise ValueError("safe_posix_requirement_open_unavailable")
+    relative = path.relative_to(root)
+    absolute = Path(os.path.abspath(root))
+    directory_flags = (os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+                       | getattr(os, "O_CLOEXEC", 0))
+    fd = os.open(absolute.anchor, directory_flags)
+    try:
+        for component in [*absolute.parts[1:], *relative.parts[:-1]]:
+            if component in ("", ".", ".."):
+                raise ValueError("unsafe_requirement_directory")
+            next_fd = os.open(component, directory_flags, dir_fd=fd)
+            os.close(fd)
+            fd = next_fd
+        return os.open(relative.parts[-1], flags, dir_fd=fd)
+    finally:
+        os.close(fd)
+
+
 def read_checked_requirements(source: dict) -> bytes:
     """Read a bounded exact input handle, refusing replacement after provenance check.
 
@@ -229,7 +266,7 @@ def read_checked_requirements(source: dict) -> bytes:
         raise ValueError("requirements changed before read")
     flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
     try:
-        fd = os.open(path, flags)
+        fd = _open_requirements_without_parent_links(root, path, flags)
     except OSError as exc:
         raise ValueError("requirements could not be safely opened") from exc
     try:
