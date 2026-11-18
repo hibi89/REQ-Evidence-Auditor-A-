@@ -6,7 +6,7 @@ from html import escape
 from pathlib import Path
 from .requirements_md import parse_markdown_requirements
 from .requirements_json import parse_json_requirements
-from .source_ref import inspect_local_source, read_checked_requirements
+from .source_ref import inspect_local_source, read_checked_requirements, source_snapshot_still_clean
 
 VERSION = "reqea.v1"
 TOOL_VERSION = "0.1.0-p1"
@@ -70,6 +70,10 @@ def build_audit(root: str, requirements: str, *, policy_sha: str = "UNVERIFIED")
     result["policy_sha"] = policy_sha
     result["tool_version"] = TOOL_VERSION
     result["verification_status"] = "NOT_RUN"
+    # A code file may have changed after the initial clean-HEAD check.
+    # Do not attach a verified commit to a mixed-time static code index.
+    if not source_snapshot_still_clean(source):
+        return _unassessed("UNVERIFIED", warnings + ["source_snapshot_changed_during_analysis"], policy_sha)
     return result
 
 

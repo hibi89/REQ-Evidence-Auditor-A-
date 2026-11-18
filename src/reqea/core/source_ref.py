@@ -95,6 +95,32 @@ def inspect_local_source(repo_root: str, requirements_path: str, *, baseline_sha
 
 
 
+def source_snapshot_still_clean(source: dict) -> bool:
+    """Reject an exact-HEAD claim if the worktree changes during analysis.
+
+    This is a second cooperative Git snapshot check, not a guarantee against
+    a malicious change-and-revert race or filesystem power loss.
+    """
+    sha = source.get("source_sha")
+    if sha == "UNVERIFIED":
+        return True  # No exact Git snapshot was asserted in the first place.
+    if not isinstance(sha, str) or not _SHA.fullmatch(sha):
+        return False
+    try:
+        root = Path(source["root"])
+        _safe_path(root)
+        head = _git(root, "rev-parse", "--verify", "HEAD")
+        top = _git(root, "rev-parse", "--show-toplevel")
+        status = _git(root, "status", "--porcelain", "--untracked-files=all")
+        return (head.returncode == 0 and top.returncode == 0
+                and status.returncode == 0
+                and head.stdout.strip().lower() == sha
+                and Path(top.stdout.strip()).resolve() == root
+                and not status.stdout.strip())
+    except (ValueError, OSError, KeyError, TypeError):
+        return False
+
+
 def _file_identity(st: os.stat_result) -> tuple[int, int, int, int]:
     """Device, inode, byte count and nanosecond write time of a trusted regular file."""
     return (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns)
