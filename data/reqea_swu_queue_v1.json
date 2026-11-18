@@ -3,8 +3,8 @@
   "as_of_kst": "2026-11-18",
   "canonical_repo": "hibi89/REQ-Evidence-Auditor-A-",
   "contract_version": "reqea.v1",
-  "central_policy_sha": "f633dcf1d3c533d2b674648e4a6515d80b85f05c",
-  "phase": "P0_DESIGNED_P1_NOT_STARTED",
+  "central_policy_sha": "77a0d978bb5676c3867b11806461e8a043e627a9",
+  "phase": "P1_A_LOCAL_CODE_WRITTEN_BC_INTEGRATION_PENDING",
   "official_implementation_rate": "UNASSESSED",
   "official_verification_rate": "UNASSESSED",
   "swus": [
@@ -20,12 +20,17 @@
         "src/reqea/core/requirements_md.py"
       ],
       "acceptance": "단일 문서→RequirementManifest; 중복/무효 REQ 오류 분기",
-      "status": "READY",
-      "implementation_status": "NOT_STARTED",
+      "status": "IMPLEMENTED_UNVERIFIED",
+      "implementation_status": "IMPLEMENTED_UNVERIFIED",
       "verification_status": "NOT_RUN",
       "retry_stage": "NONE",
       "initial_no_progress_attempts": 0,
-      "redesign_no_progress_attempts": 0
+      "redesign_no_progress_attempts": 0,
+      "source_evidence": [
+        "src/reqea/core/requirements_md.py",
+        "0a39d675b020436a0d109d42a9abb7173215a6b8"
+      ],
+      "local_minimum": "PASS_PYTHON_COMPILE_SMOKE"
     },
     {
       "id": "A-02",
@@ -39,12 +44,17 @@
         "src/reqea/core/requirements_json.py"
       ],
       "acceptance": "유효/무효 JSON→동일 정규화 구조, 악성 입력 거절",
-      "status": "READY",
-      "implementation_status": "NOT_STARTED",
+      "status": "IMPLEMENTED_UNVERIFIED",
+      "implementation_status": "IMPLEMENTED_UNVERIFIED",
       "verification_status": "NOT_RUN",
       "retry_stage": "NONE",
       "initial_no_progress_attempts": 0,
-      "redesign_no_progress_attempts": 0
+      "redesign_no_progress_attempts": 0,
+      "source_evidence": [
+        "src/reqea/core/requirements_json.py",
+        "0d3fb7d1f0e3b112a425b50355f7b01bf03a5ffc"
+      ],
+      "local_minimum": "PASS_PYTHON_COMPILE_SMOKE"
     },
     {
       "id": "A-03",
@@ -59,12 +69,17 @@
         "src/reqea/core/source_ref.py"
       ],
       "acceptance": "source_sha 유효/미확인 구분, 대상 파일 미변경",
-      "status": "READY",
-      "implementation_status": "NOT_STARTED",
+      "status": "IMPLEMENTED_UNVERIFIED",
+      "implementation_status": "IMPLEMENTED_UNVERIFIED",
       "verification_status": "NOT_RUN",
       "retry_stage": "NONE",
       "initial_no_progress_attempts": 0,
-      "redesign_no_progress_attempts": 0
+      "redesign_no_progress_attempts": 0,
+      "source_evidence": [
+        "src/reqea/core/source_ref.py",
+        "60cef7f62515d0c021530f4098113b3c16bd3426"
+      ],
+      "local_minimum": "PASS_PYTHON_COMPILE_SMOKE"
     },
     {
       "id": "A-04",
@@ -85,12 +100,18 @@
         "src/reqea/core/orchestrator.py"
       ],
       "acceptance": "source_sha/contract 불일치 차단, 결과 반환",
-      "status": "READY",
-      "implementation_status": "NOT_STARTED",
+      "status": "IN_PROGRESS",
+      "implementation_status": "PARTIAL_SOURCE",
       "verification_status": "NOT_RUN",
       "retry_stage": "NONE",
       "initial_no_progress_attempts": 0,
-      "redesign_no_progress_attempts": 0
+      "redesign_no_progress_attempts": 0,
+      "blocked_by": [
+        "B-05",
+        "C-04"
+      ],
+      "source_written": true,
+      "local_minimum": "PASS_COMPILE_FAIL_CLOSED_SMOKE"
     },
     {
       "id": "A-05",
@@ -108,12 +129,17 @@
         "src/reqea/core/output.py"
       ],
       "acceptance": "로컬 명령→JSON/HTML 파일; 권한 거절 실패 처리",
-      "status": "READY",
-      "implementation_status": "NOT_STARTED",
+      "status": "IN_PROGRESS",
+      "implementation_status": "PARTIAL_SOURCE",
       "verification_status": "NOT_RUN",
       "retry_stage": "NONE",
       "initial_no_progress_attempts": 0,
-      "redesign_no_progress_attempts": 0
+      "redesign_no_progress_attempts": 0,
+      "blocked_by": [
+        "A-04"
+      ],
+      "source_written": true,
+      "local_minimum": "PASS_COMPILE_FAIL_CLOSED_SMOKE"
     },
     {
       "id": "A-06",
@@ -130,12 +156,17 @@
         "src/reqea/gui/"
       ],
       "acceptance": "GUI→동일 CLI 엔진, 한글/오류 메시지",
-      "status": "READY",
-      "implementation_status": "NOT_STARTED",
+      "status": "IN_PROGRESS",
+      "implementation_status": "PARTIAL_SOURCE",
       "verification_status": "NOT_RUN",
       "retry_stage": "NONE",
       "initial_no_progress_attempts": 0,
-      "redesign_no_progress_attempts": 0
+      "redesign_no_progress_attempts": 0,
+      "blocked_by": [
+        "A-05"
+      ],
+      "source_written": true,
+      "local_minimum": "PASS_COMPILE_FAIL_CLOSED_SMOKE"
     },
     {
       "id": "A-07",
@@ -152,12 +183,17 @@
         ".github/workflows/reqea-audit.yml"
       ],
       "acceptance": "명시적 workflow_dispatch/read-only checkout, 증거 PASS 남발 금지",
-      "status": "READY",
-      "implementation_status": "NOT_STARTED",
+      "status": "IN_PROGRESS",
+      "implementation_status": "PARTIAL_SOURCE",
       "verification_status": "NOT_RUN",
       "retry_stage": "NONE",
       "initial_no_progress_attempts": 0,
-      "redesign_no_progress_attempts": 0
+      "redesign_no_progress_attempts": 0,
+      "blocked_by": [
+        "A-05"
+      ],
+      "source_written": true,
+      "local_minimum": "PASS_COMPILE_FAIL_CLOSED_SMOKE"
     },
     {
       "id": "B-01",
@@ -379,5 +415,12 @@
       "initial_no_progress_attempts": 0,
       "redesign_no_progress_attempts": 0
     }
-  ]
+  ],
+  "p1_local_candidate_swus": [
+    "A-01",
+    "A-02",
+    "A-03"
+  ],
+  "p1_local_candidate_count": 3,
+  "p1_local_total_swus": 17
 }
