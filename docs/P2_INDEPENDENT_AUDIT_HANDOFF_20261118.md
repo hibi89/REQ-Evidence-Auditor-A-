@@ -5,18 +5,22 @@ A author-side P2 automation, synthetic recovery, cross-platform package, static 
 
 - Authoritative product: `hibi89/REQ-Evidence-Auditor-A-`
 - Integration branch: `integration/reqea-p1-20261118` (**never `main` without separate owner GO**)
-- Exact tested code+tests SHA: `49b4a207706bfc84a77fc638dcd6a04bf2628323`
+- Latest tested code+tests SHA: `b623b6500f739e36fdc653099e18606f64af49e9` (previous immutable tested baseline: `49b4a207706bfc84a77fc638dcd6a04bf2628323`)
 - The prior functional guard code was introduced at `32f133cb1ab8203edae7c264bf4de6977612a9f0`.
-- [Actions evidence 44267405032](https://github.com/hibi89/REQ-Evidence-Auditor-A-/actions/runs/44267405032): SUCCESS **6/6 jobs** at tested SHA; Windows Server 2025 **56/56 tests PASS**, Ubuntu 24.04 **53 PASS / 3 SKIP**, unsigned CLI/GUI EXE CI build and synthetic GUI callbacks, wheel, Bandit, Chromium file://, zero-mutation public checkout PASS.
+- [Latest Actions evidence 44279994485](https://github.com/hibi89/REQ-Evidence-Auditor-A-/actions/runs/44279994485): SUCCESS **6/6 jobs** at latest SHA; Windows Server 2025 **57 PASS / 1 SKIP**, Ubuntu 24.04 **55 PASS / 3 SKIP**, unsigned CLI/GUI EXE CI build and synthetic GUI callbacks, wheel, Bandit, Chromium file://, zero-mutation public checkout PASS. Previous baseline [44267405032](https://github.com/hibi89/REQ-Evidence-Auditor-A-/actions/runs/44267405032) retained as historical evidence.
 - P1 source candidates **17/17 SWU**, requirements mapped **30/30 REQ**. Official *weighted* implementation/verification rates both **UNASSESSED**; not 100% acceptance.
 - P2 9-gate *unweighted reference states*: P2-03 and P2-06 scoped PASS (2); P2-01/02/04/05/07/08 PARTIAL_PASS (6); P2-09 NOT_RUN (1). None may be promoted to full acceptance without relevant independent evidence.
+
+## 2026-11-18 latest independent-review focus
+- Inspect the newly fixed untrusted `core.fsmonitor` external-process execution vector and `tests/p2/test_git_readonly_safety.py`; original fail-first reproduction was synthetic and local. This author-side fix is **not an independent security signoff**.
+- Code branch HEAD must be refreshed after this documentation-only update; audit the latest tested source SHA `b623b6500f739e36fdc653099e18606f64af49e9`, not the older `49b4a207706bfc84a77fc638dcd6a04bf2628323` baseline alone.
 
 ## Reviewer 1 — Codex technical/security (MODEL_UNVERIFIED until actually launched)
 **Goal:** independent P2 review of immutable source baseline, defects repaired and retested; do not treat author-side CI as an independent audit.
 
 **Instructions to paste into a Codex review session:**
 
-> REQ Evidence Auditor A의 독립 P2 기술·보안 검수자다. `hibi89/REQ-Evidence-Auditor-A-`의 `integration/reqea-p1-20261118`에서 먼저 원격 HEAD와 기준 구현 SHA `49b4a207706bfc84a77fc638dcd6a04bf2628323`를 확인하고 `AGENTS.md`, `docs/FINAL_BLUEPRINT.md`, 고정 `docs/CONTRACT_V1.md`, `docs/P2_VERIFICATION_REPORT_20261118.md` 및 실제 A/B/C 소스를 독립 점검하라. 소스 import/실행·네트워크 전송·고객 원본 업로드 없이 합성 로컬 자료로 탐색 경계, symlink/junction/hardlink, cwd/UNC, race/TOCTOU, 중단된 결과물 3종, `--overwrite` 잠금 소유권·다중 writer, 잘못된 JSON/REQ, 숨김 secret·HTML escaping·CSP·Git SHA provenance·무허가 VERIFIED를 공격적으로 검증하라. P2-01/02/05/08과 30 REQ 계약을 근거별 PASS/FAIL/NOT_RUN으로 구분하라. 결함은 보호된 별도 작업 브랜치에서 실제 수정·국소 재검증·SHA와 함께 보고하되, 원본/권한/고객 자료/외부 전송·main 병합·배포·출시 변경은 사용자 GO 없이 수행하지 말라. 검수 모델/실행/증거가 없으면 NOT_RUN, 스스로 작성한 변경에 대한 자기 확인은 독립 재검수로 오인하지 말라.
+> REQ Evidence Auditor A의 독립 P2 기술·보안 검수자다. `hibi89/REQ-Evidence-Auditor-A-`의 `integration/reqea-p1-20261118`에서 먼저 원격 HEAD와 기준 구현 SHA `b623b6500f739e36fdc653099e18606f64af49e9`를 확인하고 `AGENTS.md`, `docs/FINAL_BLUEPRINT.md`, 고정 `docs/CONTRACT_V1.md`, `docs/P2_VERIFICATION_REPORT_20261118.md` 및 실제 A/B/C 소스를 독립 점검하라. 소스 import/실행·네트워크 전송·고객 원본 업로드 없이 합성 로컬 자료로 탐색 경계, symlink/junction/hardlink, cwd/UNC, race/TOCTOU, 중단된 결과물 3종, `--overwrite` 잠금 소유권·다중 writer, 잘못된 JSON/REQ, 숨김 secret·HTML escaping·CSP·Git SHA provenance·무허가 VERIFIED를 공격적으로 검증하라. P2-01/02/05/08과 30 REQ 계약을 근거별 PASS/FAIL/NOT_RUN으로 구분하라. 결함은 보호된 별도 작업 브랜치에서 실제 수정·국소 재검증·SHA와 함께 보고하되, 원본/권한/고객 자료/외부 전송·main 병합·배포·출시 변경은 사용자 GO 없이 수행하지 말라. 검수 모델/실행/증거가 없으면 NOT_RUN, 스스로 작성한 변경에 대한 자기 확인은 독립 재검수로 오인하지 말라.
 
 **Priority risk:** crash/power-loss group atomicity NOT_PROVEN; external lock deletion/directory replacement race NOT_PROVEN. Existing code intentionally fails closed on an abandoned `.reqea-transaction.lock` or `.reqea-*` remnants. Never remove/recover these automatically; do not accept destructive "fix" that erases original output or recovery backups.
 

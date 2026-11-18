@@ -1,13 +1,19 @@
 # STATUS — REQ Evidence Auditor A / P2
 
-## Latest phase gate (2026-11-18 KST)
+## 2026-11-18 18:52 KST — verified Git provenance subprocess security fix
+- **Latest verified code/tests SHA** `b623b6500f739e36fdc653099e18606f64af49e9`; [Actions 44279994485](https://github.com/hibi89/REQ-Evidence-Auditor-A-/actions/runs/44279994485) **SUCCESS 6/6**: Ubuntu 55 PASS/3 SKIP; Windows Server 2025 57 PASS/1 SKIP; unsigned Windows CLI/GUI EXE synthetic, Bandit, offline Chromium and read-only checkout all PASS. The single Windows skip is a POSIX-only executable-hook fixture; a cross-platform Git argument assertion passed.
+- Actual synthetic local security reproduction: untrusted repository `core.fsmonitor` executable was invoked by `git status` before the fix. The A provenance helper now forces `-c core.fsmonitor=false` for read-only Git calls. `tests/p2/test_git_readonly_safety.py` adds the regression. No customer data or external hooks invoked during verification on the fixed source.
+- **P2 scoped author CI recheck PASS; independent acceptance NOT_RUN.** Reference states unchanged: 2 scoped PASS / 6 PARTIAL_PASS / 1 NOT_RUN; official weighted verification **UNASSESSED**. Remaining adversarial directory replacement/lock removal, real power-loss recovery, Windows 11 GUI, actual manual workflow_dispatch, independent code/security and Astra UX audits, High final signoff remain unverified or HOLD. Do not release, change permissions, merge main or delete recovery evidence.
+
+
+## Prior phase gate (2026-11-18 KST; superseded by security-fix run above)
 - **A author-side scoped P2: SELF_P2_SCOPED_DONE. Next: INDEPENDENT_REVIEW_READY.** This is handoff readiness, **NOT VERIFIED** or release acceptance.
 - Exact product/tests proven SHA: `49b4a207706bfc84a77fc638dcd6a04bf2628323`; [Actions 44267405032](https://github.com/hibi89/REQ-Evidence-Auditor-A-/actions/runs/44267405032) **6/6 SUCCESS**, Windows 56/56 PASS, Ubuntu 53 PASS/3 SKIP. No product source changes since that SHA; later commits are documentation only.
 - Independent Codex security/technical, Astra UX, real Windows 11 GUI and manual workflow_dispatch remain **NOT_RUN**. P2 reference 2 scoped PASS, 6 PARTIAL, 1 NOT_RUN. Official weighted verification **UNASSESSED**. NO main merge/release.
 - Reviewer-specific exact scope and ready-to-use instructions: `docs/P2_INDEPENDENT_AUDIT_HANDOFF_20261118.md`. Further author-side test expansion is not the next gate.
 
 
-**2026-11-18 KST · latest verified test/source SHA `49b4a207706bfc84a77fc638dcd6a04bf2628323` (run 44267405032); historical runs retained below**
+**2026-11-18 KST · earlier verified test/source SHA `49b4a207706bfc84a77fc638dcd6a04bf2628323` (run 44267405032); historical runs retained below**
 - Repo `hibi89/REQ-Evidence-Auditor-A-`, branch `integration/reqea-p1-20261118`. Frozen contract `reqea.v1`; A/B/C P1 **17/17 source code candidates** and 30/30 REQ mapped; official implementation weighted rate **UNASSESSED**.
 - P2 [Actions 44263874334](https://github.com/hibi89/REQ-Evidence-Auditor-A-/actions/runs/44263874334) **6/6 jobs PASS**. Windows Python3.11 **51/51 PASS**, Ubuntu **48 PASS + 3 OS SKIP**; wheel on both OS PASS. Windows unsigned CLI/GUI EXE build, CLI executable Unicode-path synthetic audit, GUI Tk synthetic event-loop PASS. Bandit medium/high, 30-REQ checkout with zero Git changes, and headless Chromium offline HTML script/CSP/privacy/no network **PASS**.
 - Security and recovery fixes: explicit `--overwrite` checks target links/reparse points, backs up prior inode, rolls back an injected second-file write failure, preserves backup if restoration also fails. **Crash atomicity/hostile races not proven**.
