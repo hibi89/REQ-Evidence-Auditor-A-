@@ -60,6 +60,10 @@ def parse_json_requirements(
     elif isinstance(data, dict):
         if data.get("schema_version", SCHEMA_VERSION) != SCHEMA_VERSION:
             raise ValueError("unsupported requirement schema_version")
+        if "source_sha" in data and _sha(data["source_sha"]) != sha:
+            raise ValueError("requirements source SHA mismatch")
+        if "policy_sha" in data and _sha(data["policy_sha"]) != policy:
+            raise ValueError("requirements policy SHA mismatch")
         rows = data.get("requirements")
     else:
         raise ValueError("JSON requirements must be an object or list")
