@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from importlib import import_module
+from html import escape
 from pathlib import Path
 from .requirements_md import parse_markdown_requirements
 from .requirements_json import parse_json_requirements
@@ -79,6 +80,16 @@ def render_audit_html(audit: dict) -> str:
         raise ValueError("report unavailable: B/C modules not integrated")
     renderer = import_module("reqea_evidence").render_html
     html = renderer(audit)
-    if not isinstance(html, str):
+    if not isinstance(html, str) or "</body>" not in html:
         raise ValueError("invalid HTML renderer output")
-    return html
+    # C owns the escaped candidate report; A adds version/provenance metadata.
+    # Escape values even when supplied by a future C integration revision.
+    policy = audit.get("policy_sha", "UNVERIFIED")
+    tool = audit.get("tool_version", TOOL_VERSION)
+    source_sha = audit.get("source_sha", "UNVERIFIED")
+    metadata = ("<section aria-label='Audit provenance'><p>Policy SHA: <code>"
+                + escape(str(policy)[:80], quote=True) + "</code> | Tool version: <code>"
+                + escape(str(tool)[:80], quote=True) + "</code> | Contract: <code>"
+                + escape(VERSION, quote=True) + "</code> | Source SHA: <code>"
+                + escape(str(source_sha)[:80], quote=True) + "</code></p></section>")
+    return html.replace("</body>", metadata + "</body>", 1)
