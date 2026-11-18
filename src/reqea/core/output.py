@@ -79,96 +79,116 @@ def save_artifacts(audit: dict, html: str, *, source_root: str, out_dir: str,
         raise ValueError("output is not a directory")
     destination.mkdir(parents=True, exist_ok=True)
     _check_no_symlinks(destination)
-    # Snapshot the three explicitly approved result names before touching any.
-    # Reject symlinks, Windows reparse points and nonregular targets even with
-    # --overwrite, rather than silently replacing an untrusted filesystem entry.
-    existing = {name: _regular_output_target(destination / name) for name in files}
-    if not overwrite and any(existing.values()):
-        raise FileExistsError("audit artifacts already exist: use --overwrite explicitly")
-    temps: list[Path] = []
-    links: list[tuple[Path, Path]] = []
-    backups: dict[str, Path] = {}
-    installed: list[tuple[str, Path, Path]] = []
-    holds: list[Path] = []
-    retain_backups: set[Path] = set()
+    # A single in-directory mkdir serializes cooperative CLI/GUI writers.
+    # A killed process intentionally leaves this sentinel for manual recovery.
+    # Never auto-delete it: a partial three-file overwrite may have occurred.
+    lock_path = destination / ".reqea-transaction.lock"
     try:
-        for name, data in files.items():
-            fd, temp = tempfile.mkstemp(prefix=".reqea-", dir=destination)
-            temps.append(Path(temp))
-            with os.fdopen(fd, "wb") as handle:
-                handle.write(data)
-                handle.flush()
-                os.fsync(handle.fileno())
-        if overwrite:
-            # Back up original inodes via same-directory hardlinks; originals
-            # remain available even after os.replace swaps each target name.
-            for name, had_original in existing.items():
-                if had_original:
-                    target = destination / name
-                    backup = _reserved_link_path(destination, ".reqea-prev-")
-                    os.link(target, backup)
-                    backups[name] = backup
-                    if not os.path.samefile(target, backup):
-                        raise ValueError("output target changed while backing up")
-        for (name, _), temp in zip(files.items(), temps):
-            target = destination / name
-            _check_no_symlinks(destination)
+        lock_path.mkdir()
+    except FileExistsError as exc:
+        raise FileExistsError(
+            "audit output transaction active or interrupted; inspect output before retry"
+        ) from exc
+    try:
+        # Leftover originals after failed restoration or interrupted staging
+        # are evidence, not disposable temporary files.
+        if any(p.name.startswith(".reqea-") for p in destination.iterdir()
+               if p.name != lock_path.name):
+            raise FileExistsError(
+                "unrecovered audit backup or staging exists; inspect before retry"
+            )
+        # Snapshot the three explicitly approved result names before touching any.
+        # Reject symlinks, Windows reparse points and nonregular targets even with
+        # --overwrite, rather than silently replacing an untrusted filesystem entry.
+        existing = {name: _regular_output_target(destination / name) for name in files}
+        if not overwrite and any(existing.values()):
+            raise FileExistsError("audit artifacts already exist: use --overwrite explicitly")
+        temps: list[Path] = []
+        links: list[tuple[Path, Path]] = []
+        backups: dict[str, Path] = {}
+        installed: list[tuple[str, Path, Path]] = []
+        holds: list[Path] = []
+        retain_backups: set[Path] = set()
+        try:
+            for name, data in files.items():
+                fd, temp = tempfile.mkstemp(prefix=".reqea-", dir=destination)
+                temps.append(Path(temp))
+                with os.fdopen(fd, "wb") as handle:
+                    handle.write(data)
+                    handle.flush()
+                    os.fsync(handle.fileno())
             if overwrite:
-                present = _regular_output_target(target)
-                if existing[name]:
-                    if not present or not os.path.samefile(target, backups[name]):
-                        raise ValueError("output changed concurrently before overwrite")
-                elif present:
-                    raise ValueError("new output appeared concurrently")
-                # A second local hardlink proves which target inode this
-                # invocation installed, avoiding rollback of external changes.
-                hold = _reserved_link_path(destination, ".reqea-new-")
-                os.link(temp, hold)
-                holds.append(hold)
-                os.replace(temp, target)
-                installed.append((name, target, hold))
-            else:
-                os.link(temp, target)  # exclusive/no existing file clobbered
-                links.append((target, temp))
-    except BaseException:
-        if overwrite:
-            for name, target, hold in reversed(installed):
-                previous = backups.get(name)
-                try:
-                    if os.path.samefile(target, hold):
-                        if previous is not None:
-                            os.replace(previous, target)
-                        else:
-                            target.unlink()
-                    elif previous is not None:
-                        # A third party changed this target: keep the old bytes.
-                        retain_backups.add(previous)
-                except (FileNotFoundError, OSError):
-                    # Never erase a backup after unproven or failed rollback.
-                    if previous is not None:
-                        retain_backups.add(previous)
-            # If a target changed during backup but before our install, retain
-            # its original snapshot rather than silently discarding evidence.
-            for name, previous in backups.items():
-                if name not in {item[0] for item in installed}:
+                # Back up original inodes via same-directory hardlinks; originals
+                # remain available even after os.replace swaps each target name.
+                for name, had_original in existing.items():
+                    if had_original:
+                        target = destination / name
+                        backup = _reserved_link_path(destination, ".reqea-prev-")
+                        os.link(target, backup)
+                        backups[name] = backup
+                        if not os.path.samefile(target, backup):
+                            raise ValueError("output target changed while backing up")
+            for (name, _), temp in zip(files.items(), temps):
+                target = destination / name
+                _check_no_symlinks(destination)
+                if overwrite:
+                    present = _regular_output_target(target)
+                    if existing[name]:
+                        if not present or not os.path.samefile(target, backups[name]):
+                            raise ValueError("output changed concurrently before overwrite")
+                    elif present:
+                        raise ValueError("new output appeared concurrently")
+                    # A second local hardlink proves which target inode this
+                    # invocation installed, avoiding rollback of external changes.
+                    hold = _reserved_link_path(destination, ".reqea-new-")
+                    os.link(temp, hold)
+                    holds.append(hold)
+                    os.replace(temp, target)
+                    installed.append((name, target, hold))
+                else:
+                    os.link(temp, target)  # exclusive/no existing file clobbered
+                    links.append((target, temp))
+        except BaseException:
+            if overwrite:
+                for name, target, hold in reversed(installed):
+                    previous = backups.get(name)
                     try:
-                        if not os.path.samefile(destination / name, previous):
+                        if os.path.samefile(target, hold):
+                            if previous is not None:
+                                os.replace(previous, target)
+                            else:
+                                target.unlink()
+                        elif previous is not None:
+                            # A third party changed this target: keep the old bytes.
                             retain_backups.add(previous)
                     except (FileNotFoundError, OSError):
-                        retain_backups.add(previous)
-        else:
-            for target, staging in reversed(links):
-                try:
-                    if os.path.samefile(target, staging):
-                        target.unlink()
-                except (FileNotFoundError, OSError):
-                    pass
-        raise
+                        # Never erase a backup after unproven or failed rollback.
+                        if previous is not None:
+                            retain_backups.add(previous)
+                # If a target changed during backup but before our install, retain
+                # its original snapshot rather than silently discarding evidence.
+                for name, previous in backups.items():
+                    if name not in {item[0] for item in installed}:
+                        try:
+                            if not os.path.samefile(destination / name, previous):
+                                retain_backups.add(previous)
+                        except (FileNotFoundError, OSError):
+                            retain_backups.add(previous)
+            else:
+                for target, staging in reversed(links):
+                    try:
+                        if os.path.samefile(target, staging):
+                            target.unlink()
+                    except (FileNotFoundError, OSError):
+                        pass
+            raise
+        finally:
+            for item in [*temps, *holds]:
+                item.unlink(missing_ok=True)
+            for previous in backups.values():
+                if previous not in retain_backups:
+                    previous.unlink(missing_ok=True)
     finally:
-        for item in [*temps, *holds]:
-            item.unlink(missing_ok=True)
-        for previous in backups.values():
-            if previous not in retain_backups:
-                previous.unlink(missing_ok=True)
+        lock_path.rmdir()
     return {"artifacts": sorted(files), "source_sha": manifest["source_sha"],
             "verification_status": "NOT_RUN"}

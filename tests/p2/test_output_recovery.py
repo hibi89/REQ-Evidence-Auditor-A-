@@ -134,5 +134,71 @@ class OutputRecovery(unittest.TestCase):
             self.assertEqual(outside.read_bytes(), b"PROTECTED")
 
 
+    def test_interrupted_transaction_sentinel_blocks_any_overwrite(self):
+        with tempfile.TemporaryDirectory() as d:
+            base = Path(d)
+            root = base / "source"
+            root.mkdir()
+            req = root / "REQ.md"
+            req.write_text("# REQ-001 synthetic\\n", encoding="utf-8")
+            audit = build_audit(str(root), str(req))
+            html = render_audit_html(audit)
+            out = base / "out"
+            save_artifacts(audit, html, source_root=str(root), out_dir=str(out))
+            self.assertFalse((out / ".reqea-transaction.lock").exists())
+            original = {p.name: p.read_bytes() for p in out.iterdir()}
+            lock = out / ".reqea-transaction.lock"
+            lock.mkdir()  # Represents a still-active or killed process.
+            changed = dict(audit, tool_version="ANOTHER_WRITER")
+            with self.assertRaisesRegex(FileExistsError, "transaction"):
+                save_artifacts(changed, html, source_root=str(root),
+                               out_dir=str(out), overwrite=True)
+            self.assertEqual({p.name: p.read_bytes() for p in out.iterdir()
+                              if p.is_file()}, original)
+            self.assertTrue(lock.is_dir(), "never remove an unowned lock")
+
+    def test_unrecovered_backup_blocks_retry_and_keeps_original_bytes(self):
+        with tempfile.TemporaryDirectory() as d:
+            base = Path(d)
+            root = base / "source"
+            root.mkdir()
+            req = root / "REQ.md"
+            req.write_text("# REQ-001 synthetic\\n", encoding="utf-8")
+            audit = build_audit(str(root), str(req))
+            html = render_audit_html(audit)
+            out = base / "out"
+            save_artifacts(audit, html, source_root=str(root), out_dir=str(out))
+            backup = out / ".reqea-prev-recovery-evidence"
+            backup.write_bytes(b"KEEP_UNVERIFIED_RECOVERY_BYTES")
+            originals = {p.name: p.read_bytes() for p in out.iterdir()}
+            with self.assertRaisesRegex(FileExistsError, "unrecovered"):
+                save_artifacts(dict(audit, tool_version="MUST_NOT_REPLACE"),
+                               html, source_root=str(root), out_dir=str(out),
+                               overwrite=True)
+            self.assertEqual({p.name: p.read_bytes() for p in out.iterdir()}, originals)
+            self.assertFalse((out / ".reqea-transaction.lock").exists())
+
+    def test_injected_failure_does_not_leave_transaction_lock(self):
+        with tempfile.TemporaryDirectory() as d:
+            base = Path(d)
+            root = base / "source"
+            root.mkdir()
+            req = root / "REQ.md"
+            req.write_text("# REQ-001 synthetic\\n", encoding="utf-8")
+            audit = build_audit(str(root), str(req))
+            html = render_audit_html(audit)
+            out = base / "out"
+            real_link = os.link
+            def fail_second(src, dst, *args, **kwargs):
+                if Path(dst).name == "report.html":
+                    raise PermissionError("synthetic second-artifact failure")
+                return real_link(src, dst, *args, **kwargs)
+            with patch("reqea.core.output.os.link", side_effect=fail_second):
+                with self.assertRaises(PermissionError):
+                    save_artifacts(audit, html, source_root=str(root), out_dir=str(out))
+            self.assertFalse((out / ".reqea-transaction.lock").exists())
+            self.assertEqual(list(out.iterdir()), [])
+
+
 if __name__ == "__main__":
     unittest.main()
