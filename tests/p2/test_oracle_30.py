@@ -40,11 +40,11 @@ class GoldOracleAcceptance(unittest.TestCase):
             ])
             if case["present"]:
                 (root / case["path"]).write_text(
-                    "def harmless(): return 42\\n", encoding="utf-8")
-        (root / "src" / "req_0120.py").write_text("def decoy(): return 1\\n", encoding="utf-8")
-        (root / "src" / "req_0290.py").write_text("def decoy(): return 1\\n", encoding="utf-8")
+                    "def harmless(): return 42\n", encoding="utf-8")
+        (root / "src" / "req_0120.py").write_text("def decoy(): return 1\n", encoding="utf-8")
+        (root / "src" / "req_0290.py").write_text("def decoy(): return 1\n", encoding="utf-8")
         req = root / "REQUIREMENTS.md"
-        req.write_text("\\n".join(lines) + "\\n", encoding="utf-8")
+        req.write_text("\n".join(lines) + "\n", encoding="utf-8")
         report = build_audit(str(root), str(req))
         observed = {item["req_id"]: item["status"] for item in report["findings"]}
         fixed = {item["req_id"]: item["expected_status"] for item in cases}
@@ -58,17 +58,17 @@ class GoldOracleAcceptance(unittest.TestCase):
 
     def test_partial_and_id_prefix_decoys_require_human_review(self):
         root = self._root()
-        (root / "src" / "live.py").write_text("def live(): return True\\n", encoding="utf-8")
-        (root / "src" / "req_0320.py").write_text("def decoy(): return True\\n", encoding="utf-8")
+        (root / "src" / "live.py").write_text("def live(): return True\n", encoding="utf-8")
+        (root / "src" / "req_0320.py").write_text("def decoy(): return True\n", encoding="utf-8")
         req = root / "REQUIREMENTS.md"
         req.write_text(
-            "# REQ-031 partial evidence\\n"
-            "Reference src/live.py and src/missing.py\\n"
-            "Acceptance criteria:\\n- both src/live.py and src/missing.py exist\\n"
-            "# REQ-032 prefix collision\\n"
-            "Acceptance criteria:\\n- inspect manually\\n"
-            "# REQ-033 no reference\\n"
-            "Acceptance criteria:\\n- human review\\n", encoding="utf-8")
+            "# REQ-031 partial evidence\n"
+            "Reference src/live.py and src/missing.py\n"
+            "Acceptance criteria:\n- both src/live.py and src/missing.py exist\n"
+            "# REQ-032 prefix collision\n"
+            "Acceptance criteria:\n- inspect manually\n"
+            "# REQ-033 no reference\n"
+            "Acceptance criteria:\n- human review\n", encoding="utf-8")
         report = build_audit(str(root), str(req))
         observed = {x["req_id"]: x["status"] for x in report["findings"]}
         self.assertEqual(observed, {
