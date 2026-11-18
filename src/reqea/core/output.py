@@ -22,6 +22,28 @@ def _check_no_symlinks(path: Path) -> None:
             raise ValueError("output symlink or junction path is prohibited")
 
 
+def _regular_output_target(path: Path) -> bool:
+    """Return whether a safe regular result exists; reject links and special files."""
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return False
+    reparse = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+    if (not stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode)
+            or getattr(info, "st_file_attributes", 0) & reparse):
+        raise ValueError("unsafe existing output target")
+    return True
+
+
+def _reserved_link_path(destination: Path, prefix: str) -> Path:
+    """Create a unique reserved local name, then link with no-clobber semantics."""
+    fd, raw = tempfile.mkstemp(prefix=prefix, dir=destination)
+    os.close(fd)
+    path = Path(raw)
+    path.unlink()
+    return path
+
+
 def save_artifacts(audit: dict, html: str, *, source_root: str, out_dir: str,
                    overwrite: bool = False) -> dict:
     if not isinstance(audit, dict) or not isinstance(html, str) or not isinstance(out_dir, str):
@@ -57,10 +79,17 @@ def save_artifacts(audit: dict, html: str, *, source_root: str, out_dir: str,
         raise ValueError("output is not a directory")
     destination.mkdir(parents=True, exist_ok=True)
     _check_no_symlinks(destination)
-    if not overwrite and any((destination / name).exists() for name in files):
+    # Snapshot the three explicitly approved result names before touching any.
+    # Reject symlinks, Windows reparse points and nonregular targets even with
+    # --overwrite, rather than silently replacing an untrusted filesystem entry.
+    existing = {name: _regular_output_target(destination / name) for name in files}
+    if not overwrite and any(existing.values()):
         raise FileExistsError("audit artifacts already exist: use --overwrite explicitly")
     temps: list[Path] = []
     links: list[tuple[Path, Path]] = []
+    backups: dict[str, Path] = {}
+    installed: list[tuple[str, Path, Path]] = []
+    holds: list[Path] = []
     try:
         for name, data in files.items():
             fd, temp = tempfile.mkstemp(prefix=".reqea-", dir=destination)
@@ -69,26 +98,60 @@ def save_artifacts(audit: dict, html: str, *, source_root: str, out_dir: str,
                 handle.write(data)
                 handle.flush()
                 os.fsync(handle.fileno())
+        if overwrite:
+            # Back up original inodes via same-directory hardlinks; originals
+            # remain available even after os.replace swaps each target name.
+            for name, had_original in existing.items():
+                if had_original:
+                    target = destination / name
+                    backup = _reserved_link_path(destination, ".reqea-prev-")
+                    os.link(target, backup)
+                    backups[name] = backup
+                    if not os.path.samefile(target, backup):
+                        raise ValueError("output target changed while backing up")
         for (name, _), temp in zip(files.items(), temps):
             target = destination / name
+            _check_no_symlinks(destination)
             if overwrite:
-                os.replace(temp, target)  # explicit per-file overwrite; not batch atomic
+                present = _regular_output_target(target)
+                if existing[name]:
+                    if not present or not os.path.samefile(target, backups[name]):
+                        raise ValueError("output changed concurrently before overwrite")
+                elif present:
+                    raise ValueError("new output appeared concurrently")
+                # A second local hardlink proves which target inode this
+                # invocation installed, avoiding rollback of external changes.
+                hold = _reserved_link_path(destination, ".reqea-new-")
+                os.link(temp, hold)
+                holds.append(hold)
+                os.replace(temp, target)
+                installed.append((name, target, hold))
             else:
-                # Keep the staging hardlink until all outputs are installed. If a
-                # later link fails, it proves which earlier targets are ours.
-                os.link(temp, target)  # exclusive, no existing file clobbered
+                os.link(temp, target)  # exclusive/no existing file clobbered
                 links.append((target, temp))
     except BaseException:
-        if not overwrite:
+        if overwrite:
+            for name, target, hold in reversed(installed):
+                try:
+                    if os.path.samefile(target, hold):
+                        previous = backups.get(name)
+                        if previous is not None:
+                            os.replace(previous, target)
+                        else:
+                            target.unlink()
+                except (FileNotFoundError, OSError):
+                    # Do not delete external writes when identity is uncertain.
+                    pass
+        else:
             for target, staging in reversed(links):
                 try:
                     if os.path.samefile(target, staging):
                         target.unlink()
                 except (FileNotFoundError, OSError):
-                    pass  # Never remove a target whose identity is unprovable.
+                    pass
         raise
     finally:
-        for temp in temps:
-            temp.unlink(missing_ok=True)
+        for item in [*temps, *holds, *backups.values()]:
+            item.unlink(missing_ok=True)
     return {"artifacts": sorted(files), "source_sha": manifest["source_sha"],
             "verification_status": "NOT_RUN"}
