@@ -139,15 +139,25 @@ def source_index_is_tracked_at_head(source: dict, code_index: dict) -> bool:
             return False
         root = Path(source["root"])
         _safe_path(root)
-        listed = _git(root, "ls-files", "--cached", "--full-name", "-z")
+        # git status can hide local content changes when the index marks a file
+        # assume-unchanged (lowercase tag) or skip-worktree (S). Neither may
+        # safely inherit the claimed HEAD even when the path is tracked.
+        listed = _git(root, "ls-files", "--cached", "--full-name", "-v", "-z")
         if listed.returncode != 0:
             return False
-        paths = set(listed.stdout.split("\0"))
+        safe_paths: set[str] = set()
+        for entry in listed.stdout.split("\0"):
+            if not entry:
+                continue
+            if len(entry) < 3 or entry[1] != " ":
+                return False
+            if entry[0] == "H":
+                safe_paths.add(entry[2:])
         req = source["source_document"]
-        if not isinstance(req, str) or req not in paths:
+        if not isinstance(req, str) or req not in safe_paths:
             return False
         return all(isinstance(item, dict) and isinstance(item.get("path"), str)
-                   and item["path"] in paths for item in files)
+                   and item["path"] in safe_paths for item in files)
     except (OSError, KeyError, TypeError, ValueError):
         return False
 

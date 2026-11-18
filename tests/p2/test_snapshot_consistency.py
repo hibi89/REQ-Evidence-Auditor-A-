@@ -81,6 +81,34 @@ class SnapshotConsistency(unittest.TestCase):
         self.assertEqual(outcome["status"], "UNASSESSED")
         self.assertIn("indexed_files_not_tracked_at_head", outcome["warnings"])
 
+    def test_assume_unchanged_modified_source_cannot_inherit_head(self):
+        # git status deliberately omits this change, even with untracked-file checks.
+        subprocess.run(["git", "-C", str(self.root), "update-index",
+                        "--assume-unchanged", "src/app.py"], check=True)
+        self.code.write_text("def answer(): return 999\\n".replace("\\n", "\n"), encoding="utf-8")
+        status = subprocess.check_output(
+            ["git", "-C", str(self.root), "status", "--porcelain"],
+            text=True).strip()
+        self.assertEqual(status, "")
+        result = build_audit(str(self.root), str(self.requirements))
+        self.assertEqual(result["source_sha"], "UNVERIFIED")
+        self.assertEqual(result["status"], "UNASSESSED")
+        self.assertEqual(result["findings"], [])
+        self.assertIn("indexed_files_not_tracked_at_head", result["warnings"])
+
+    def test_skip_worktree_requirements_cannot_inherit_head(self):
+        subprocess.run(["git", "-C", str(self.root), "update-index",
+                        "--skip-worktree", "requirements.md"], check=True)
+        status = subprocess.check_output(
+            ["git", "-C", str(self.root), "status", "--porcelain"],
+            text=True).strip()
+        self.assertEqual(status, "")
+        result = build_audit(str(self.root), str(self.requirements))
+        self.assertEqual(result["source_sha"], "UNVERIFIED")
+        self.assertEqual(result["status"], "UNASSESSED")
+        self.assertEqual(result["findings"], [])
+        self.assertIn("indexed_files_not_tracked_at_head", result["warnings"])
+
     def test_tracked_unicode_source_keeps_head(self):
         korean = self.root / "src" / "한글.py"
         korean.write_text("def available(): return 1\n", encoding="utf-8")
