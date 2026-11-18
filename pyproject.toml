@@ -15,4 +15,4 @@ reqea-gui = "reqea.gui.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["reqea*"]
+include = ["reqea", "reqea.*", "reqea_codegraph", "reqea_codegraph.*", "reqea_evidence", "reqea_evidence.*"]
