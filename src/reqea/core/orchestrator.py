@@ -6,7 +6,7 @@ from html import escape
 from pathlib import Path
 from .requirements_md import parse_markdown_requirements
 from .requirements_json import parse_json_requirements
-from .source_ref import inspect_local_source, read_checked_requirements, source_snapshot_still_clean
+from .source_ref import inspect_local_source, read_checked_requirements, source_snapshot_still_clean, source_index_is_tracked_at_head
 
 VERSION = "reqea.v1"
 TOOL_VERSION = "0.1.0-p1"
@@ -74,6 +74,8 @@ def build_audit(root: str, requirements: str, *, policy_sha: str = "UNVERIFIED")
     # Do not attach a verified commit to a mixed-time static code index.
     if not source_snapshot_still_clean(source):
         return _unassessed("UNVERIFIED", warnings + ["source_snapshot_changed_during_analysis"], policy_sha)
+    if not source_index_is_tracked_at_head(source, code_index):
+        return _unassessed("UNVERIFIED", warnings + ["indexed_files_not_tracked_at_head"], policy_sha)
     return result
 
 

@@ -39,6 +39,59 @@ class SnapshotConsistency(unittest.TestCase):
             ["git", "-C", str(self.root), "rev-parse", "HEAD"], text=True
         ).strip().lower()
 
+    def _commit_fixture(self, *files):
+        subprocess.run(["git", "-C", str(self.root), "add", *files], check=True)
+        subprocess.run(["git", "-C", str(self.root),
+                        "-c", "user.name=P2 Fixture",
+                        "-c", "user.email=p2-fixture@example.invalid",
+                        "commit", "-qm", "synthetic fixture revision"], check=True)
+        return subprocess.check_output(
+            ["git", "-C", str(self.root), "rev-parse", "HEAD"],
+            text=True).strip().lower()
+
+    def test_ignored_untracked_code_never_claims_exact_head(self):
+        (self.root / ".gitignore").write_text("src/ignored.py\\n", encoding="utf-8")
+        frozen = self._commit_fixture(".gitignore")
+        ignored = self.root / "src" / "ignored.py"
+        ignored.write_text("def ignored_reference(): return 3\\n", encoding="utf-8")
+        self.requirements.write_text(
+            "# REQ-001 local evidence\\nReference src/ignored.py\\n"
+            "Acceptance criteria:\\n- source src/ignored.py exists\\n", encoding="utf-8")
+        # Persist changed requirements as a separate clean baseline.
+        frozen = self._commit_fixture("requirements.md")
+        status = subprocess.check_output(
+            ["git", "-C", str(self.root), "status", "--porcelain"],
+            text=True).strip()
+        self.assertEqual(status, "")
+        outcome = build_audit(str(self.root), str(self.requirements))
+        self.assertEqual(outcome["source_sha"], "UNVERIFIED")
+        self.assertEqual(outcome["status"], "UNASSESSED")
+        self.assertEqual(outcome["findings"], [])
+        self.assertIn("indexed_files_not_tracked_at_head", outcome["warnings"])
+
+    def test_ignored_requirements_never_claim_exact_head(self):
+        (self.root / ".gitignore").write_text("src/private_req.md\\n", encoding="utf-8")
+        self._commit_fixture(".gitignore")
+        ignored_req = self.root / "src" / "private_req.md"
+        ignored_req.write_text(
+            "# REQ-001 private ignored\\nReference src/app.py\\n"
+            "Acceptance criteria:\\n- read local app\\n", encoding="utf-8")
+        outcome = build_audit(str(self.root), str(ignored_req))
+        self.assertEqual(outcome["source_sha"], "UNVERIFIED")
+        self.assertEqual(outcome["status"], "UNASSESSED")
+        self.assertIn("indexed_files_not_tracked_at_head", outcome["warnings"])
+
+    def test_tracked_unicode_source_keeps_head(self):
+        korean = self.root / "src" / "한글.py"
+        korean.write_text("def available(): return 1\\n", encoding="utf-8")
+        self.requirements.write_text(
+            "# REQ-001 Korean reference\\nReference src/한글.py\\n"
+            "Acceptance criteria:\\n- indexed source src/한글.py\\n", encoding="utf-8")
+        expected = self._commit_fixture("requirements.md", "src/한글.py")
+        result = build_audit(str(self.root), str(self.requirements))
+        self.assertEqual(result["source_sha"], expected, result["warnings"])
+        self.assertNotIn("indexed_files_not_tracked_at_head", result["warnings"])
+
     def test_stable_checkout_keeps_exact_source_sha(self):
         outcome = build_audit(str(self.root), str(self.requirements))
         self.assertEqual(outcome["source_sha"], self.sha)

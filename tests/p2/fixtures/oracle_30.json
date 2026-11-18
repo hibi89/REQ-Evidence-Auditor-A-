@@ -1,0 +1,185 @@
+{
+  "schema": "reqea.p2.oracle.v1",
+  "cases": [
+    {
+      "req_id": "REQ-001",
+      "path": "src/gold_001.py",
+      "present": true,
+      "expected_status": "CODE_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-002",
+      "path": "src/gold_002.py",
+      "present": true,
+      "expected_status": "CODE_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-003",
+      "path": "src/gold_003.py",
+      "present": true,
+      "expected_status": "CODE_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-004",
+      "path": "src/gold_004.py",
+      "present": true,
+      "expected_status": "CODE_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-005",
+      "path": "src/gold_005.py",
+      "present": true,
+      "expected_status": "CODE_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-006",
+      "path": "src/gold_006.py",
+      "present": true,
+      "expected_status": "CODE_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-007",
+      "path": "src/gold_007.py",
+      "present": true,
+      "expected_status": "CODE_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-008",
+      "path": "src/gold_008.py",
+      "present": true,
+      "expected_status": "CODE_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-009",
+      "path": "src/gold_009.py",
+      "present": true,
+      "expected_status": "CODE_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-010",
+      "path": "src/gold_010.py",
+      "present": true,
+      "expected_status": "CODE_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-011",
+      "path": "src/gold_011.py",
+      "present": false,
+      "expected_status": "GAP_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-012",
+      "path": "src/gold_012.py",
+      "present": false,
+      "expected_status": "GAP_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-013",
+      "path": "src/gold_013.py",
+      "present": false,
+      "expected_status": "GAP_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-014",
+      "path": "src/gold_014.py",
+      "present": false,
+      "expected_status": "GAP_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-015",
+      "path": "src/gold_015.py",
+      "present": false,
+      "expected_status": "GAP_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-016",
+      "path": "src/gold_016.py",
+      "present": true,
+      "expected_status": "CODE_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-017",
+      "path": "src/gold_017.py",
+      "present": true,
+      "expected_status": "CODE_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-018",
+      "path": "src/gold_018.py",
+      "present": true,
+      "expected_status": "CODE_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-019",
+      "path": "src/gold_019.py",
+      "present": true,
+      "expected_status": "CODE_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-020",
+      "path": "src/gold_020.py",
+      "present": true,
+      "expected_status": "CODE_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-021",
+      "path": "src/gold_021.py",
+      "present": true,
+      "expected_status": "CODE_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-022",
+      "path": "src/gold_022.py",
+      "present": true,
+      "expected_status": "CODE_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-023",
+      "path": "src/gold_023.py",
+      "present": true,
+      "expected_status": "CODE_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-024",
+      "path": "src/gold_024.py",
+      "present": true,
+      "expected_status": "CODE_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-025",
+      "path": "src/gold_025.py",
+      "present": true,
+      "expected_status": "CODE_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-026",
+      "path": "src/gold_026.py",
+      "present": false,
+      "expected_status": "GAP_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-027",
+      "path": "src/gold_027.py",
+      "present": false,
+      "expected_status": "GAP_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-028",
+      "path": "src/gold_028.py",
+      "present": false,
+      "expected_status": "GAP_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-029",
+      "path": "src/gold_029.py",
+      "present": false,
+      "expected_status": "GAP_CANDIDATE"
+    },
+    {
+      "req_id": "REQ-030",
+      "path": "src/gold_030.py",
+      "present": false,
+      "expected_status": "GAP_CANDIDATE"
+    }
+  ]
+}

@@ -33,8 +33,9 @@ def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(["git", "--no-optional-locks", "-c", "core.fsmonitor=false",
                                "-C", str(root), *args],
                               stdin=subprocess.DEVNULL, capture_output=True, text=True,
-                              timeout=4, check=False, env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"})
-    except (OSError, subprocess.TimeoutExpired):
+                              timeout=4, check=False, encoding="utf-8", errors="strict",
+                              env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"})
+    except (OSError, UnicodeError, subprocess.TimeoutExpired):
         return subprocess.CompletedProcess(args, 1, "", "git_unavailable")
 
 
@@ -118,6 +119,35 @@ def source_snapshot_still_clean(source: dict) -> bool:
                 and Path(top.stdout.strip()).resolve() == root
                 and not status.stdout.strip())
     except (ValueError, OSError, KeyError, TypeError):
+        return False
+
+
+def source_index_is_tracked_at_head(source: dict, code_index: dict) -> bool:
+    """Never attach a clean HEAD to ignored or untracked scanned source files.
+
+    Git status excludes paths ignored by .gitignore, but the static index scans
+    allowed source extensions even when ignored. Those bytes are not guaranteed
+    to exist at HEAD; all indexed evidence and the selected REQ must be tracked
+    before a commit SHA can be reported as provenance.
+    """
+    if source.get("source_sha") == "UNVERIFIED":
+        return True  # Caller already labels provenance as unverified.
+    try:
+        files = code_index["files"]
+        if not isinstance(files, list):
+            return False
+        root = Path(source["root"])
+        _safe_path(root)
+        listed = _git(root, "ls-files", "--cached", "--full-name", "-z")
+        if listed.returncode != 0:
+            return False
+        paths = set(listed.stdout.split("\0"))
+        req = source["source_document"]
+        if not isinstance(req, str) or req not in paths:
+            return False
+        return all(isinstance(item, dict) and isinstance(item.get("path"), str)
+                   and item["path"] in paths for item in files)
+    except (OSError, KeyError, TypeError, ValueError):
         return False
 
 
