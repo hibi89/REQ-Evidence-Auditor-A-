@@ -77,7 +77,13 @@ def _check_windows_open_handle(root: Path, relative: str, descriptor: int) -> No
         actual = actual[len(prefix):]
         if len(actual) < 3 or actual[1:3] != ":\\":
             raise ValueError("windows_open_handle_provenance_unavailable")
-        expected = os.path.normcase(os.path.abspath(root.joinpath(*relative.split("/"))))
+        # Windows may receive a short 8.3 alias for the selected root (RUNNER~1)
+        # even though opened HANDLE names use long paths. Canonicalize only
+        # the selected root, never the child path: following a swapped junction
+        # in the latter would make an out-of-tree file look acceptable.
+        selected_root = os.path.realpath(root)
+        expected = os.path.normcase(os.path.abspath(
+            Path(selected_root).joinpath(*relative.split("/"))))
         if os.path.normcase(os.path.normpath(actual)) != expected:
             raise ValueError("file_changed_or_unsafe")
     except (OSError, OverflowError, TypeError) as exc:
