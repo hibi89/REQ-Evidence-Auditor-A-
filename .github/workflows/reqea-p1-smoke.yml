@@ -1,0 +1,68 @@
+name: REQEA P1 synthetic integration smoke
+on:
+  push:
+    branches:
+      - integration/reqea-p1-20261118
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  p1-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Python syntax and cross-module synthetic smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q src
+          export PYTHONPATH="$GITHUB_WORKSPACE/src"
+          python - <<'PY'
+          import json, os, subprocess, sys, tempfile
+          from pathlib import Path
+          from reqea.core.orchestrator import build_audit, render_audit_html
+          from reqea.core.output import save_artifacts
+          with tempfile.TemporaryDirectory() as d:
+              parent = Path(d)
+              root = parent / "synthetic-repo"
+              root.mkdir()
+              (root / "src").mkdir()
+              (root / "src" / "app.py").write_text(
+                  "def run():\n    return 'REQ-001 candidate'\n", encoding="utf-8"
+              )
+              req = root / "REQ.md"
+              req.write_text(
+                  "# REQ-001 - Local check\n"
+                  "Explicit reference: src/app.py\n"
+                  "Acceptance criteria:\n"
+                  "- Static function exists\n", encoding="utf-8"
+              )
+              audit = build_audit(str(root), str(req))
+              assert audit["schema_version"] == "reqea.v1"
+              assert audit["source_sha"] == "UNVERIFIED"
+              assert audit["status"] in ("CODE_CANDIDATE", "GAP_CANDIDATE", "REVIEW_REQUIRED", "UNASSESSED")
+              assert "required_B_or_C_module_unavailable" not in audit["warnings"], audit["warnings"]
+              assert "B_contract_or_SHA_mismatch" not in audit["warnings"], audit["warnings"]
+              assert "C_contract_or_SHA_mismatch" not in audit["warnings"], audit["warnings"]
+              html = render_audit_html(audit)
+              assert isinstance(html, str) and "<html" in html.lower()
+              out = parent / "report"
+              saved = save_artifacts(audit, html, source_root=str(root), out_dir=str(out))
+              assert all((out / name).is_file() for name in ("audit.json", "report.html", "manifest.json"))
+              assert saved["verification_status"] == "NOT_RUN"
+              env = os.environ.copy()
+              result = subprocess.run([sys.executable, "-m", "reqea.cli", "audit",
+                                       "--repo", str(root), "--requirements", str(req),
+                                       "--out", str(parent / "cli-report")],
+                                      env=env, capture_output=True, text=True, timeout=20)
+              assert result.returncode == 0, (result.returncode, result.stderr)
+              assert json.loads((parent / "cli-report" / "audit.json").read_text(encoding="utf-8"))["source_sha"] == "UNVERIFIED"
+          print("P1 A/B/C synthetic import + JSON/HTML + CLI PASS; P2 NOT_RUN")
+          PY
+# No artifact upload; no real source, customer files, secrets, or external service access.
