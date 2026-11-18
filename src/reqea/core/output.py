@@ -90,6 +90,7 @@ def save_artifacts(audit: dict, html: str, *, source_root: str, out_dir: str,
     backups: dict[str, Path] = {}
     installed: list[tuple[str, Path, Path]] = []
     holds: list[Path] = []
+    retain_backups: set[Path] = set()
     try:
         for name, data in files.items():
             fd, temp = tempfile.mkstemp(prefix=".reqea-", dir=destination)
@@ -132,16 +133,29 @@ def save_artifacts(audit: dict, html: str, *, source_root: str, out_dir: str,
     except BaseException:
         if overwrite:
             for name, target, hold in reversed(installed):
+                previous = backups.get(name)
                 try:
                     if os.path.samefile(target, hold):
-                        previous = backups.get(name)
                         if previous is not None:
                             os.replace(previous, target)
                         else:
                             target.unlink()
+                    elif previous is not None:
+                        # A third party changed this target: keep the old bytes.
+                        retain_backups.add(previous)
                 except (FileNotFoundError, OSError):
-                    # Do not delete external writes when identity is uncertain.
-                    pass
+                    # Never erase a backup after unproven or failed rollback.
+                    if previous is not None:
+                        retain_backups.add(previous)
+            # If a target changed during backup but before our install, retain
+            # its original snapshot rather than silently discarding evidence.
+            for name, previous in backups.items():
+                if name not in {item[0] for item in installed}:
+                    try:
+                        if not os.path.samefile(destination / name, previous):
+                            retain_backups.add(previous)
+                    except (FileNotFoundError, OSError):
+                        retain_backups.add(previous)
         else:
             for target, staging in reversed(links):
                 try:
@@ -151,7 +165,10 @@ def save_artifacts(audit: dict, html: str, *, source_root: str, out_dir: str,
                     pass
         raise
     finally:
-        for item in [*temps, *holds, *backups.values()]:
+        for item in [*temps, *holds]:
             item.unlink(missing_ok=True)
+        for previous in backups.values():
+            if previous not in retain_backups:
+                previous.unlink(missing_ok=True)
     return {"artifacts": sorted(files), "source_sha": manifest["source_sha"],
             "verification_status": "NOT_RUN"}

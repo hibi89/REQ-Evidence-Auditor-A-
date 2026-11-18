@@ -77,6 +77,40 @@ class OutputRecovery(unittest.TestCase):
                            overwrite=True)
             self.assertNotEqual((out / "audit.json").read_bytes(), originals["audit.json"])
 
+    def test_failed_rollback_retains_original_backup_for_manual_recovery(self):
+        with tempfile.TemporaryDirectory() as d:
+            base = Path(d)
+            root = base / "source"
+            root.mkdir()
+            req = root / "REQ.md"
+            req.write_text("# REQ-001 synthetic\n", encoding="utf-8")
+            audit = build_audit(str(root), str(req))
+            html = render_audit_html(audit)
+            out = base / "out"
+            save_artifacts(audit, html, source_root=str(root), out_dir=str(out))
+            original = (out / "audit.json").read_bytes()
+            changed = dict(audit)
+            changed["tool_version"] = "SYNTHETIC_OVERWRITE"
+            real_replace = os.replace
+            installed_count = 0
+            def fail_update_and_rollback(src, dst, *args, **kwargs):
+                nonlocal installed_count
+                if Path(dst).name in {"audit.json", "report.html", "manifest.json"}:
+                    if Path(src).name.startswith(".reqea-prev-"):
+                        raise PermissionError("synthetic failed restore")
+                    installed_count += 1
+                    if installed_count == 2:
+                        raise PermissionError("synthetic update failure")
+                return real_replace(src, dst, *args, **kwargs)
+            with patch("reqea.core.output.os.replace", side_effect=fail_update_and_rollback):
+                with self.assertRaises(PermissionError):
+                    save_artifacts(changed, html, source_root=str(root),
+                                   out_dir=str(out), overwrite=True)
+            backups = [p for p in out.iterdir() if p.name.startswith(".reqea-prev-")]
+            self.assertTrue(backups, "original backup must survive failed rollback")
+            self.assertIn(original, [p.read_bytes() for p in backups])
+            self.assertFalse(any(p.name.startswith(".reqea-new-") for p in out.iterdir()))
+
     def test_overwrite_refuses_existing_symlink_output(self):
         with tempfile.TemporaryDirectory() as d:
             base = Path(d)
