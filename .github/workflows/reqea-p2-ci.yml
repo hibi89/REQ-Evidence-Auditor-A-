@@ -71,3 +71,53 @@ jobs:
           python -m pip wheel --no-deps --wheel-dir ./local-wheel .
       - name: No artifact publication
         run: echo "Synthetic fixtures only; no source/customer file artifacts uploaded."
+
+  windows-exe:
+    needs: test
+    runs-on: windows-2025
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Local-only unsigned CLI and GUI EXE construction
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install "pyinstaller>=6.10,<7"
+          python -m PyInstaller --noconfirm --clean --onefile --name reqea-cli --paths src --hidden-import reqea_codegraph --hidden-import reqea_evidence src/reqea/entry_cli.py
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name reqea-gui --paths src --hidden-import reqea_codegraph --hidden-import reqea_evidence src/reqea/entry_gui.py
+      - name: Execute CLI EXE on synthetic Unicode Windows project
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, subprocess, tempfile
+          from pathlib import Path
+          cli = Path("dist/reqea-cli.exe").absolute()
+          gui = Path("dist/reqea-gui.exe").absolute()
+          assert cli.is_file() and gui.is_file()
+          help_result = subprocess.run([str(cli), "--help"], capture_output=True, text=True, timeout=45)
+          assert help_result.returncode == 0, (help_result.returncode, help_result.stderr)
+          with tempfile.TemporaryDirectory() as d:
+              parent = Path(d)
+              root = parent / "synthetic 한글 프로젝트"
+              (root / "src").mkdir(parents=True)
+              (root / "src" / "app.py").write_bytes(b"def run():\n    return 1\n")
+              req = root / "requirements.md"
+              req.write_text("# REQ-001 - synthetic\nReference src/app.py\nAcceptance criteria:\n- static exists\n", encoding="utf-8")
+              out = parent / "output"
+              result = subprocess.run([str(cli), "audit", "--repo", str(root),
+                                       "--requirements", str(req), "--out", str(out)],
+                                      capture_output=True, text=True, timeout=60)
+              assert result.returncode == 0, (result.returncode, result.stderr)
+              assert json.loads((out / "audit.json").read_text(encoding="utf-8"))["schema_version"] == "reqea.v1"
+              assert (out / "report.html").is_file() and (out / "manifest.json").is_file()
+              print("Windows unsigned CLI EXE synthetic audit PASS; GUI EXE built but GUI live automation NOT_RUN")
+          PY
+      - name: Ephemeral only; never upload unsigned EXE or reports
+        run: echo "Portable EXE files remain on runner only. No artifact upload or release."
