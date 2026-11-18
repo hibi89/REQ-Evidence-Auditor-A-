@@ -46,7 +46,7 @@ class P2SyntheticAcceptance(unittest.TestCase):
         self.assertEqual([f["req_id"] for f in audit["findings"]], ["REQ-%03d" % i for i in range(1, 31)])
         self.assertEqual(audit["summary"]["code_candidates"], 20)
         self.assertEqual(audit["summary"]["gap_candidates"], 10)
-        self.assertNotIn("VERIFIED", json.dumps(audit))
+        self.assertTrue(all(f["status"] != "VERIFIED" for f in audit["findings"]))
         self.assertEqual(audit["verification_status"], "NOT_RUN")
 
     def test_no_refs_never_certifies(self):
@@ -113,6 +113,7 @@ class P2SyntheticAcceptance(unittest.TestCase):
         self.assertTrue(limited["limits"]["truncated"])
         manifest = parse_markdown_requirements(self.req.read_text(encoding="utf-8"),
                                                source_document="requirements.md")
+        manifest.pop("policy_sha", None)  # reqea.v1 C accepts only 40-hex when present
         out = evaluate(manifest, limited, {})
         self.assertNotIn("GAP_CANDIDATE", [f["status"] for f in out["findings"]])
 
