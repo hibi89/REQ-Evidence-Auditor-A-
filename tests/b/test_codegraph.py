@@ -17,7 +17,8 @@ class CodegraphSmoke(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
             source = "import json\nclass Task:\n    def run(self):\n        return self.go()\n    def go(self):\n        return 1\ndef main():\n    return json.dumps(1)\n"
-            (root / "app.py").write_text(source, encoding="utf8")
+            # Identical bytes on Linux and Windows: no implicit CRLF translation.
+            (root / "app.py").write_bytes(source.encode("utf8"))
             (root / "web.ts").write_text('import { foo } from "./util";\nexport function hi() { return 1 }\nimport("dynamic");\n', encoding="utf8")
             (root / ".env.production").write_text("SHOULD_NOT_SHOW=123")
             (root / "key.pem").write_text("secret")
