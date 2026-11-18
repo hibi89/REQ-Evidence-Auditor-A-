@@ -9,6 +9,10 @@ from pathlib import Path
 
 from .walk import WalkFile, _is_reparse, safe_relative
 
+# Capability is stable for a running interpreter; cache before test interception.
+_ANCHORED_OPEN_AVAILABLE = (os.open in getattr(os, "supports_dir_fd", set())
+                          and hasattr(os, "O_NOFOLLOW") and hasattr(os, "O_DIRECTORY"))
+
 LANGUAGES = {
     ".py": "python", ".pyi": "python", ".js": "javascript",
     ".jsx": "javascript", ".mjs": "javascript", ".cjs": "javascript",
@@ -43,9 +47,7 @@ def _open_without_ancestor_links(root: Path, relative: str, flags: int) -> int:
     lookup through a newly inserted symlink. Windows retains the older path
     checks until native handle-relative, reparse-safe directory opens exist.
     """
-    supported = (os.open in getattr(os, "supports_dir_fd", set())
-                 and hasattr(os, "O_NOFOLLOW") and hasattr(os, "O_DIRECTORY"))
-    if not supported:
+    if not _ANCHORED_OPEN_AVAILABLE:
         return os.open(root.joinpath(*relative.split("/")), flags)
     absolute = Path(os.path.abspath(root))
     if not absolute.is_absolute():
