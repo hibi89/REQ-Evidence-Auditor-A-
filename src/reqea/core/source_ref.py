@@ -28,7 +28,10 @@ def _safe_path(path: Path) -> None:
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
     try:
-        return subprocess.run(["git", "--no-optional-locks", "-C", str(root), *args],
+        # Untrusted repository config may define an executable core.fsmonitor hook.
+        # Disable it even for read-only git status/rev-parse probes.
+        return subprocess.run(["git", "--no-optional-locks", "-c", "core.fsmonitor=false",
+                               "-C", str(root), *args],
                               stdin=subprocess.DEVNULL, capture_output=True, text=True,
                               timeout=4, check=False, env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"})
     except (OSError, subprocess.TimeoutExpired):
