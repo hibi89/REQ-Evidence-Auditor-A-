@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import stat
 from pathlib import Path
 import tempfile
 import unittest
@@ -82,7 +83,7 @@ class ReadDirectorySwapSafety(unittest.TestCase):
                     read_probe.assert_not_called()
             self.assertTrue(switched)
             self.assertEqual((moved / "app.py").read_bytes(), original)
-            self.assertTrue(directory.is_junction())
+            self.assertTrue(directory.lstat().st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
             # Dispose only synthetic junction, never source contents.
             directory.rmdir()
             self.assertEqual((moved / "app.py").read_bytes(), original)
