@@ -1,5 +1,12 @@
 # STATUS — REQ Evidence Auditor A / P2
 
+## Latest phase gate (2026-11-18 KST)
+- **A author-side scoped P2: SELF_P2_SCOPED_DONE. Next: INDEPENDENT_REVIEW_READY.** This is handoff readiness, **NOT VERIFIED** or release acceptance.
+- Exact product/tests proven SHA: `49b4a207706bfc84a77fc638dcd6a04bf2628323`; [Actions 44267405032](https://github.com/hibi89/REQ-Evidence-Auditor-A-/actions/runs/44267405032) **6/6 SUCCESS**, Windows 56/56 PASS, Ubuntu 53 PASS/3 SKIP. No product source changes since that SHA; later commits are documentation only.
+- Independent Codex security/technical, Astra UX, real Windows 11 GUI and manual workflow_dispatch remain **NOT_RUN**. P2 reference 2 scoped PASS, 6 PARTIAL, 1 NOT_RUN. Official weighted verification **UNASSESSED**. NO main merge/release.
+- Reviewer-specific exact scope and ready-to-use instructions: `docs/P2_INDEPENDENT_AUDIT_HANDOFF_20261118.md`. Further author-side test expansion is not the next gate.
+
+
 **2026-11-18 KST · latest verified test/source SHA `49b4a207706bfc84a77fc638dcd6a04bf2628323` (run 44267405032); historical runs retained below**
 - Repo `hibi89/REQ-Evidence-Auditor-A-`, branch `integration/reqea-p1-20261118`. Frozen contract `reqea.v1`; A/B/C P1 **17/17 source code candidates** and 30/30 REQ mapped; official implementation weighted rate **UNASSESSED**.
 - P2 [Actions 44263874334](https://github.com/hibi89/REQ-Evidence-Auditor-A-/actions/runs/44263874334) **6/6 jobs PASS**. Windows Python3.11 **51/51 PASS**, Ubuntu **48 PASS + 3 OS SKIP**; wheel on both OS PASS. Windows unsigned CLI/GUI EXE build, CLI executable Unicode-path synthetic audit, GUI Tk synthetic event-loop PASS. Bandit medium/high, 30-REQ checkout with zero Git changes, and headless Chromium offline HTML script/CSP/privacy/no network **PASS**.
