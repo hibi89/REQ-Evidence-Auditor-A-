@@ -60,6 +60,7 @@ def save_artifacts(audit: dict, html: str, *, source_root: str, out_dir: str,
     if not overwrite and any((destination / name).exists() for name in files):
         raise FileExistsError("audit artifacts already exist: use --overwrite explicitly")
     temps: list[Path] = []
+    links: list[tuple[Path, Path]] = []
     try:
         for name, data in files.items():
             fd, temp = tempfile.mkstemp(prefix=".reqea-", dir=destination)
@@ -71,10 +72,21 @@ def save_artifacts(audit: dict, html: str, *, source_root: str, out_dir: str,
         for (name, _), temp in zip(files.items(), temps):
             target = destination / name
             if overwrite:
-                os.replace(temp, target)
+                os.replace(temp, target)  # explicit per-file overwrite; not batch atomic
             else:
-                os.link(temp, target)  # exclusive/no clobber, same filesystem
-                temp.unlink()
+                # Keep the staging hardlink until all outputs are installed. If a
+                # later link fails, it proves which earlier targets are ours.
+                os.link(temp, target)  # exclusive, no existing file clobbered
+                links.append((target, temp))
+    except BaseException:
+        if not overwrite:
+            for target, staging in reversed(links):
+                try:
+                    if os.path.samefile(target, staging):
+                        target.unlink()
+                except (FileNotFoundError, OSError):
+                    pass  # Never remove a target whose identity is unprovable.
+        raise
     finally:
         for temp in temps:
             temp.unlink(missing_ok=True)
