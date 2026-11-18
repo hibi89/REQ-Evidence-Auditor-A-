@@ -143,7 +143,8 @@ def match_requirement(requirement: dict, files: dict, source_sha: str) -> dict:
         # A static reference can nominate an implementation site, never prove behavioral acceptance.
         related = [r for r in indexed_refs if r in criterion]
         absent = [r for r in missing if r in criterion]
-        state = "CODE_CANDIDATE" if related else "GAP_CANDIDATE" if absent else "UNASSESSED"
+        state = ("REVIEW_REQUIRED" if related and absent else "CODE_CANDIDATE" if related
+                 else "GAP_CANDIDATE" if absent else "UNASSESSED")
         per_criterion.append({"criterion": criterion, "status": state})
     return {"evidence": sorted(evidence.values(), key=lambda e: (e["path"], e["symbol"], e["line"])),
             "missing_refs": sorted(set(missing)), "criteria": per_criterion,

@@ -76,7 +76,10 @@ class GoldOracleAcceptance(unittest.TestCase):
             "REQ-032": "UNASSESSED",
             "REQ-033": "UNASSESSED",
         })
-        self.assertNotIn("VERIFIED", json.dumps(report))
+        self.assertTrue(all(f["status"] != "VERIFIED" for f in report["findings"]))
+        self.assertEqual(report["verification_status"], "NOT_RUN")
+        partial = next(f for f in report["findings"] if f["req_id"] == "REQ-031")
+        self.assertEqual(partial["acceptance_criteria"][0]["status"], "REVIEW_REQUIRED")
 
 
 if __name__ == "__main__":
