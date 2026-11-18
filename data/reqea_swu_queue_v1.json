@@ -4,7 +4,7 @@
   "canonical_repo": "hibi89/REQ-Evidence-Auditor-A-",
   "contract_version": "reqea.v1",
   "central_policy_sha": "77a0d978bb5676c3867b11806461e8a043e627a9",
-  "phase": "P1_ABC_CODE_COPIED_INTEGRATION_SMOKE_UNVERIFIED",
+  "phase": "P1_IMPLEMENTATION_100_CANDIDATE_P2_LOCKED",
   "official_implementation_rate": "UNASSESSED",
   "official_verification_rate": "UNASSESSED",
   "swus": [
@@ -30,7 +30,10 @@
         "src/reqea/core/requirements_md.py",
         "0a39d675b020436a0d109d42a9abb7173215a6b8"
       ],
-      "local_minimum": "PASS_PYTHON_COMPILE_SMOKE"
+      "local_minimum": "PASS_MD_PARSER_SYNTHETIC",
+      "source_written": true,
+      "integration_smoke": "PASS_SYNTHETIC_RUN_44252969444",
+      "known_p2": "P2 full independent validation NOT_RUN"
     },
     {
       "id": "A-02",
@@ -54,7 +57,10 @@
         "src/reqea/core/requirements_json.py",
         "0d3fb7d1f0e3b112a425b50355f7b01bf03a5ffc"
       ],
-      "local_minimum": "PASS_PYTHON_COMPILE_SMOKE"
+      "local_minimum": "PASS_JSON_PARSER_SYNTHETIC",
+      "source_written": true,
+      "integration_smoke": "PASS_SYNTHETIC_RUN_44252969444",
+      "known_p2": "P2 full independent validation NOT_RUN"
     },
     {
       "id": "A-03",
@@ -79,7 +85,10 @@
         "src/reqea/core/source_ref.py",
         "60cef7f62515d0c021530f4098113b3c16bd3426"
       ],
-      "local_minimum": "PASS_PYTHON_COMPILE_SMOKE"
+      "local_minimum": "PASS_SOURCE_REF_INTEGRATION_SYNTHETIC",
+      "source_written": true,
+      "integration_smoke": "PASS_SYNTHETIC_RUN_44252969444",
+      "known_p2": "P2 full independent validation NOT_RUN"
     },
     {
       "id": "A-04",
@@ -100,18 +109,16 @@
         "src/reqea/core/orchestrator.py"
       ],
       "acceptance": "source_sha/contract 불일치 차단, 결과 반환",
-      "status": "IN_PROGRESS",
-      "implementation_status": "PARTIAL_SOURCE",
+      "status": "IMPLEMENTED_UNVERIFIED",
+      "implementation_status": "IMPLEMENTED_UNVERIFIED",
       "verification_status": "NOT_RUN",
       "retry_stage": "NONE",
       "initial_no_progress_attempts": 0,
       "redesign_no_progress_attempts": 0,
-      "blocked_by": [
-        "A04_A05_A06_A07_LIVE_INTEGRATION_SMOKE"
-      ],
       "source_written": true,
-      "local_minimum": "PASS_COMPILE_FAIL_CLOSED_SMOKE",
-      "integration_smoke": "NOT_CONFIRMED"
+      "local_minimum": "PASS_LIVE_A_B_C_SYNTHETIC_CONTRACT",
+      "integration_smoke": "PASS_SYNTHETIC_RUN_44252969444",
+      "known_p2": "P2 full independent validation NOT_RUN"
     },
     {
       "id": "A-05",
@@ -129,18 +136,16 @@
         "src/reqea/core/output.py"
       ],
       "acceptance": "로컬 명령→JSON/HTML 파일; 권한 거절 실패 처리",
-      "status": "IN_PROGRESS",
-      "implementation_status": "PARTIAL_SOURCE",
+      "status": "IMPLEMENTED_UNVERIFIED",
+      "implementation_status": "IMPLEMENTED_UNVERIFIED",
       "verification_status": "NOT_RUN",
       "retry_stage": "NONE",
       "initial_no_progress_attempts": 0,
       "redesign_no_progress_attempts": 0,
-      "blocked_by": [
-        "A04_A05_A06_A07_LIVE_INTEGRATION_SMOKE"
-      ],
       "source_written": true,
-      "local_minimum": "PASS_COMPILE_FAIL_CLOSED_SMOKE",
-      "integration_smoke": "NOT_CONFIRMED"
+      "local_minimum": "PASS_CLI_JSON_HTML_AND_OUTPUT_DENIAL",
+      "integration_smoke": "PASS_SYNTHETIC_RUN_44252969444",
+      "known_p2": "P2 full independent validation NOT_RUN"
     },
     {
       "id": "A-06",
@@ -157,18 +162,16 @@
         "src/reqea/gui/"
       ],
       "acceptance": "GUI→동일 CLI 엔진, 한글/오류 메시지",
-      "status": "IN_PROGRESS",
-      "implementation_status": "PARTIAL_SOURCE",
+      "status": "IMPLEMENTED_UNVERIFIED",
+      "implementation_status": "IMPLEMENTED_UNVERIFIED",
       "verification_status": "NOT_RUN",
       "retry_stage": "NONE",
       "initial_no_progress_attempts": 0,
       "redesign_no_progress_attempts": 0,
-      "blocked_by": [
-        "A04_A05_A06_A07_LIVE_INTEGRATION_SMOKE"
-      ],
       "source_written": true,
-      "local_minimum": "PASS_COMPILE_FAIL_CLOSED_SMOKE",
-      "integration_smoke": "NOT_CONFIRMED"
+      "local_minimum": "PASS_SYNTAX_ONLY_WINDOWS_GUI_NOT_RUN",
+      "integration_smoke": "PASS_SYNTHETIC_RUN_44252969444",
+      "known_p2": "Windows GUI/EXE live test NOT_RUN"
     },
     {
       "id": "A-07",
@@ -185,18 +188,16 @@
         ".github/workflows/reqea-audit.yml"
       ],
       "acceptance": "명시적 workflow_dispatch/read-only checkout, 증거 PASS 남발 금지",
-      "status": "IN_PROGRESS",
-      "implementation_status": "PARTIAL_SOURCE",
+      "status": "IMPLEMENTED_UNVERIFIED",
+      "implementation_status": "IMPLEMENTED_UNVERIFIED",
       "verification_status": "NOT_RUN",
       "retry_stage": "NONE",
       "initial_no_progress_attempts": 0,
       "redesign_no_progress_attempts": 0,
-      "blocked_by": [
-        "A04_A05_A06_A07_LIVE_INTEGRATION_SMOKE"
-      ],
       "source_written": true,
-      "local_minimum": "PASS_COMPILE_FAIL_CLOSED_SMOKE",
-      "integration_smoke": "NOT_CONFIRMED"
+      "local_minimum": "WORKFLOW_SOURCE_IMPLEMENTED_MANUAL_DISPATCH_NOT_RUN",
+      "integration_smoke": "PASS_SYNTHETIC_RUN_44252969444",
+      "known_p2": "Manual workflow_dispatch test NOT_RUN"
     },
     {
       "id": "B-01",
@@ -470,6 +471,10 @@
     "A-01",
     "A-02",
     "A-03",
+    "A-04",
+    "A-05",
+    "A-06",
+    "A-07",
     "B-01",
     "B-02",
     "B-03",
@@ -481,7 +486,7 @@
     "C-04",
     "C-05"
   ],
-  "p1_candidate_count": 13,
+  "p1_candidate_count": 17,
   "p1_planned_swus": 17,
   "integration_source_commits": {
     "A": "6dbeffc3348547e5a6e2a9c885993afcf0aa30a1",
@@ -493,5 +498,11 @@
     "B": "ab6878ae6608c48d36887e985c11505a292bd5b4",
     "C": "d423fea91668affd691c399918e3f16b06954501"
   },
-  "integration_smoke": "NOT_CONFIRMED"
+  "integration_smoke": "PASS_SYNTHETIC_GITHUB_RUN_44252969444_3_OF_3",
+  "p1_candidate_ratio": "17/17 (100% SWU candidate count; not formal approved weighted rate)",
+  "integration_status": "P1_IMPLEMENTATION_CANDIDATE",
+  "p1_acceptance_scope": "SOURCE_COMPLETE_IMPLEMENTED_UNVERIFIED",
+  "p2_status": "NOT_RUN",
+  "speed_effect": "UNMEASURED_NO_SERIAL_BASELINE",
+  "implementation_evidence_commit": "7e8b9ef88ebbc68d995b4dc470668ac7fd3bcdaf"
 }
