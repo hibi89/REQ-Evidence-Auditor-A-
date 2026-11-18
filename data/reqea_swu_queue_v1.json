@@ -510,20 +510,20 @@
   "integration_copied_paths_updated": 6,
   "integration_file_sha256_verified": "13/13",
   "p1_local_A_smoke": "MIRRORED_A_SOURCE_LOGIC_PASS_NOT_CHECKOUT_EXACT",
-  "p2_evidence_sha": "61352c583c072a95ba8e14e91b0b114e54a92125",
-  "p2_ci_run": 44261707248,
-  "p2_ci_jobs_passed": 5,
+  "p2_evidence_sha": "c36ba2ec0e14214f2637c57ce716c31b3756a2c9",
+  "p2_ci_run": 44263874334,
+  "p2_ci_jobs_passed": 6,
   "p2_linux_tests": {
-    "passed": 45,
+    "passed": 48,
     "skipped": 3,
     "failed": 0,
-    "invocations": 48
+    "invocations": 51
   },
   "p2_windows_tests": {
-    "passed": 48,
+    "passed": 51,
     "skipped": 0,
     "failed": 0,
-    "invocations": 48
+    "invocations": 51
   },
   "p2_exe": {
     "windows_runner": "windows-2025",
@@ -543,15 +543,23 @@
   "p2_new_safety_scenarios": 9,
   "p2_hardlink_requirement_reject": "PASS",
   "p2_gate_reference_counts": {
-    "pass_executed_scope": 1,
-    "partial_pass": 7,
+    "pass_executed_scope": 2,
+    "partial_pass": 6,
     "not_run": 1,
     "total": 9,
-    "unweighted_pass_percent_rounded": 11.1,
-    "official_verification_rate": "UNASSESSED"
+    "unweighted_pass_percent_rounded": 22.2,
+    "official_verification_rate": "UNASSESSED",
+    "gate_ids_scoped_pass": [
+      "P2-03",
+      "P2-06"
+    ]
   },
   "p2_input_sha256_bound_read": "PASS_SYNTHETIC_BOTH_OS",
   "p2_input_same_size_swap_rejection": "PASS_SYNTHETIC_BOTH_OS",
   "p2_output_no_clobber_second_link_rollback": "PASS_SYNTHETIC_BOTH_OS",
-  "p2_output_explicit_overwrite_crash_recovery": "NOT_RUN"
+  "p2_output_explicit_overwrite_crash_recovery": "NOT_RUN",
+  "p2_html_chromium_offline_csp_privacy": "PASS_RUN_44263874334",
+  "p2_output_explicit_overwrite_rollback": "PASS_FAULT_INJECTION_BOTH_OS",
+  "p2_output_existing_symlink_denied": "PASS_BOTH_OS",
+  "p2_output_failed_restore_backup_retained": "PASS_FAULT_INJECTION_BOTH_OS"
 }

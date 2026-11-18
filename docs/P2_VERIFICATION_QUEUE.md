@@ -15,3 +15,6 @@
 
 ## 2026-11-18 latest P2 update
 Current reference: [run 44261707248](https://github.com/hibi89/REQ-Evidence-Auditor-A-/actions/runs/44261707248) at `61352c583c072a95ba8e14e91b0b114e54a92125` PASS 5/5; Windows 48 PASS, Linux 45 PASS + 3 SKIP. Added same-size replaced REQ SHA256 defense and injected no-clobber rollback PASS. P2-02 and P2-08 remain PARTIAL until explicit-overwrite/crash recovery, broader concurrency, and independent audit. Official verification rate UNASSESSED, not 100%.
+
+## 2026-11-18 P2-06 Chromium and overwrite recovery update
+Latest exact SHA `c36ba2ec0e14214f2637c57ce716c31b3756a2c9`, [Run 44263874334](https://github.com/hibi89/REQ-Evidence-Auditor-A-/actions/runs/44263874334) SUCCESS 6/6. P2-03 and P2-06 PASS (scoped automated acceptance); P2-01/02/04/05/07/08 PARTIAL_PASS; P2-09 NOT_RUN. Gate count 2/9 (22.2%) is unweighted reference only. Official verification rate UNASSESSED. 51/51 Windows tests, 48 PASS + 3 SKIP Linux; fault-injection overwrite rollback PASS; Chromium CSP/no-network/privacy PASS. Power-loss recovery, hostile concurrency, Windows 11 manual UX and independent Codex/Astra approval remain NOT_RUN.
