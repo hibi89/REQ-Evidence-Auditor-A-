@@ -1,12 +1,6 @@
 name: REQEA P1 synthetic integration smoke
 on:
-  push:
-    branches:
-      - integration/reqea-p1-20261118
   workflow_dispatch:
-  pull_request:
-    branches:
-      - integration/reqea-p1-20261118
 permissions:
   contents: read
 jobs:
