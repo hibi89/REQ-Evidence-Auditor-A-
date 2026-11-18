@@ -148,3 +148,40 @@ jobs:
           python -m bandit -q -r src -ll
       - name: Security findings are not an independent human audit
         run: echo "Bandit medium/high static scan only. Manual threat modeling and independent review NOT_RUN."
+
+  readonly-checkout:
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      PYTHONPATH: src
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Audit exact public integration checkout without remote/data transfer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m reqea.cli audit --repo "$GITHUB_WORKSPACE" --requirements "$GITHUB_WORKSPACE/docs/FINAL_BLUEPRINT.md" --out "$RUNNER_TEMP/reqea-p2-local"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          report = json.loads((Path(os.environ["RUNNER_TEMP"]) / "reqea-p2-local" / "audit.json").read_text(encoding="utf-8"))
+          expected = ["REQ-%03d" % i for i in range(1, 31)]
+          assert [f["req_id"] for f in report["findings"]] == expected
+          assert report["verification_status"] == "NOT_RUN"
+          assert report["status"] in ("CODE_CANDIDATE", "GAP_CANDIDATE", "REVIEW_REQUIRED", "UNASSESSED")
+          print("Real checked-out public A repo 30-REQ scan PASS; candidates are not certified.")
+          PY
+          if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
+            echo "Repository was modified by read-only audit" >&2
+            exit 1
+          fi
+          echo "Repo mutation zero; output only in runner temp, no upload or release."
