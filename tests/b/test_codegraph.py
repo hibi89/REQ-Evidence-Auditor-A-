@@ -25,6 +25,26 @@ class CodegraphSmoke(unittest.TestCase):
             options = {"source_sha": "a" * 40}
             one = build_code_index(d, options)
             two = build_code_index(d, options)
+            if os.name == "nt" and not one["files"]:
+                # Synthetic-only Win32 handle diagnostic; never opens customer files.
+                import ctypes, msvcrt
+                from ctypes import wintypes
+                p = root / "app.py"
+                fd = os.open(p, os.O_RDONLY | getattr(os, "O_BINARY", 0))
+                try:
+                    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+                    fn = kernel.GetFinalPathNameByHandleW
+                    fn.argtypes = [wintypes.HANDLE, wintypes.LPWSTR, wintypes.DWORD, wintypes.DWORD]
+                    fn.restype = wintypes.DWORD
+                    buff = ctypes.create_unicode_buffer(32768)
+                    resultlen = fn(wintypes.HANDLE(msvcrt.get_osfhandle(fd)), buff, 32768, 0)
+                    print("WIN_NATIVE_HANDLE_SYNTHETIC_DIAGNOSTIC", repr(buff.value),
+                          repr(str(p)), resultlen, ctypes.get_last_error(),
+                          "normalized_equal:",
+                          os.path.normcase(os.path.normpath(buff.value.replace("\\\\?\\", "", 1)))
+                          == os.path.normcase(os.path.abspath(p)))
+                finally:
+                    os.close(fd)
             self.assertEqual(json.dumps(one, sort_keys=True), json.dumps(two, sort_keys=True))
             self.assertEqual(one["schema_version"], "reqea.v1")
             self.assertEqual(one["source_sha"], "a" * 40)
