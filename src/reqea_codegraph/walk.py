@@ -136,7 +136,9 @@ def scan_tree(root: str, options: dict) -> WalkResult:
                 result.skipped_files += 1
                 continue
             try:
-                info = entry.stat(follow_symlinks=False)
+                # On Windows DirEntry.stat can report st_dev/st_ino = 0/0, unlike
+                # os.fstat(fd); use lstat of the same absolute entry for identity.
+                info = os.lstat(entry.path)
             except OSError:
                 result.skipped_files += 1
                 result.truncated = True
