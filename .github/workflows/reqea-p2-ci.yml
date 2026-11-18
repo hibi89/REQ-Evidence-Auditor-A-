@@ -1,0 +1,47 @@
+name: REQEA P2 synthetic cross-platform verification
+on:
+  push:
+    branches: [integration/reqea-p1-20261118]
+    paths: ['src/**', 'tests/**', 'pyproject.toml', '.github/workflows/reqea-p2-ci.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: src
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Syntax and exact SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          python -m compileall -q src tests
+      - name: B C A and P2 complete synthetic suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests/b -v
+          python -m unittest discover -s tests/c -v
+          python -m unittest discover -s tests/integration -v
+          python -m unittest discover -s tests/p2 -v
+      - name: Package installable wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip wheel --no-deps --wheel-dir ./local-wheel .
+      - name: No artifact publication
+        run: echo "Synthetic fixtures only; no source/customer file artifacts uploaded."
