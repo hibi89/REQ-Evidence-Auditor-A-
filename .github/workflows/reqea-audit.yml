@@ -1,0 +1,34 @@
+name: REQEA local-checkout audit (manual only)
+on:
+  workflow_dispatch:
+    inputs:
+      requirements:
+        description: "Repository-relative requirements document"
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout explicitly dispatched repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Audit only the checked-out local files
+        shell: bash
+        env:
+          REQEA_INPUT: ${{ inputs.requirements }}
+          REQEA_OUT: ${{ runner.temp }}/reqea-report
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="$GITHUB_WORKSPACE/src"
+          python -m reqea.cli audit --repo "$GITHUB_WORKSPACE" --requirements "$GITHUB_WORKSPACE/$REQEA_INPUT" --out "$REQEA_OUT"
+          echo "Audit generated local-only candidate artifacts. P2 NOT_RUN."
+# Deliberately do not upload any artifact from a PUBLIC repository.
