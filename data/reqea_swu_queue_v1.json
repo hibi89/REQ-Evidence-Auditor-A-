@@ -4,7 +4,7 @@
   "canonical_repo": "hibi89/REQ-Evidence-Auditor-A-",
   "contract_version": "reqea.v1",
   "central_policy_sha": "77a0d978bb5676c3867b11806461e8a043e627a9",
-  "phase": "P1_17_OF_17_SOURCE_CANDIDATES_RECONCILED_P2_NOT_RUN",
+  "phase": "P2_PARTIAL_EXECUTED_INDEPENDENT_GATES_PENDING",
   "official_implementation_rate": "UNASSESSED",
   "official_verification_rate": "UNASSESSED",
   "swus": [
@@ -502,12 +502,40 @@
   "p1_candidate_ratio": "17/17 (100% SWU candidate count; not formal approved weighted rate)",
   "integration_status": "P1_IMPLEMENTATION_CANDIDATE",
   "p1_acceptance_scope": "SOURCE_COMPLETE_IMPLEMENTED_UNVERIFIED",
-  "p2_status": "NOT_RUN",
+  "p2_status": "PARTIAL_PASS_INDEPENDENT_NOT_RUN",
   "speed_effect": "UNMEASURED_NO_SERIAL_BASELINE",
   "implementation_evidence_commit": "2fbcdbad353f7ea051e968b42bfe18b73a98e32c",
   "integration_latest_B_head": "f9a94c26db445badae6c6e476eb6d40246f9ff4c",
   "integration_latest_C_head": "c66fa81044a5804fe8ef94049905e8c7c833cdf3",
   "integration_copied_paths_updated": 6,
   "integration_file_sha256_verified": "13/13",
-  "p1_local_A_smoke": "MIRRORED_A_SOURCE_LOGIC_PASS_NOT_CHECKOUT_EXACT"
+  "p1_local_A_smoke": "MIRRORED_A_SOURCE_LOGIC_PASS_NOT_CHECKOUT_EXACT",
+  "p2_evidence_sha": "d6f3c29bde20ad5f121d58e7c26bf2ec1e148bcd",
+  "p2_ci_run": 44258446968,
+  "p2_ci_jobs_passed": 5,
+  "p2_linux_tests": {
+    "passed": 35,
+    "skipped": 1,
+    "failed": 0
+  },
+  "p2_windows_tests": {
+    "passed": 36,
+    "skipped": 0,
+    "failed": 0
+  },
+  "p2_exe": {
+    "windows_runner": "windows-2025",
+    "cli_build": "PASS",
+    "gui_build": "PASS",
+    "cli_synthetic": "PASS",
+    "gui_tk_synthetic": "PASS",
+    "windows11_real_visual": "NOT_RUN",
+    "published": false
+  },
+  "p2_bandit_medium_high": "PASS",
+  "p2_readonly_checkout_30_req": "PASS",
+  "p2_independent_codex": "NOT_RUN",
+  "p2_independent_astra": "NOT_RUN",
+  "p2_windows11_manual": "NOT_RUN",
+  "p2_manual_workflow_dispatch": "NOT_RUN"
 }

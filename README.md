@@ -11,3 +11,5 @@
 - [P2 deferred verification queue](docs/P2_VERIFICATION_QUEUE.md)
 
 Work areas: [A](https://github.com/hibi89/REQ-Evidence-Auditor-A-), [B](https://github.com/hibi89/REQ-Evidence-Auditor-B-), [C](https://github.com/hibi89/REQ-Evidence-Auditor-C-). **A is the only final combined product.** Exact GitHub repository names include their trailing hyphen; do not rename without separate approval. All three are public; never commit private/customer source or secrets. This design branch is not main.
+
+**P2 execution evidence (2026-11-18):** Linux/Windows synthetic and wheel checks, Bandit static security, Windows CLI/GUI unsigned EXE build, CLI binary and Tk callback passed in [run 44258446968](https://github.com/hibi89/REQ-Evidence-Auditor-A-/actions/runs/44258446968). This is *not* Windows 11 real-user or independent sign-off. See [P2 report](docs/P2_VERIFICATION_REPORT_20261118.md); release HOLD.

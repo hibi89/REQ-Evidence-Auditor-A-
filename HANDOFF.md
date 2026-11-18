@@ -19,3 +19,10 @@ Date: 2026-11-18 15:44 KST. Owner: A integration lead. Product `hibi89/REQ-Evide
 - Latest B/C source corrections: warning fanout capped+truncated, exact REQ identifier matching and inconsistent index scanned-file counts. A: Markdown table acceptance/UTF-8 refs and provenance metadata in manifest/HTML.
 - Tests: original A/B/C integrated synthetic 3/3 PASS on **older** code SHA. B updated 4/4, C updated 17/17 local worker PASS, A local mirrored parser/output checks PASS. **Latest full A/B/C cross-module run NOT_RUN**. All P2 full CI/Windows EXE/GUI/security/regression/independent audit NOT_RUN and remain separately gated.
 - No main, Production, release or deletion. A starts 15:08:51 KST, B 15:07 KST, C 15:08:52 KST; completion timestamp = report update commit. Serial comparison `UNMEASURED`.
+
+## 2026-11-18 P2 실행 인계 — 자체 증거 확인, 독립 인수 미완
+- Tested exact P2 source SHA `d6f3c29bde20ad5f121d58e7c26bf2ec1e148bcd`, Actions run [44258446968](https://github.com/hibi89/REQ-Evidence-Auditor-A-/actions/runs/44258446968) 5/5 jobs PASS; Linux 35 PASS 1 SKIP, Windows 36 PASS, wheel on both, Bandit static PASS, public own checkout 30-REQ read-only audit PASS (zero mutations).
+- Windows Server 2025 runner: unsigned CLI/GUI onefile EXE builds PASS; CLI EXE synthetic Korean-path end-to-end PASS; Tk callback/event-loop synthetic PASS, NOT Windows 11 manual UX. No downloadable EXE uploaded.
+- Windows path false rejects and junction protection repaired in A integration; code and P2 tests at exact SHA. See `docs/P2_VERIFICATION_REPORT_20261118.md`.
+- **P2 independent technical/security by Codex Sol Max: NOT_RUN. Astra Max UX: NOT_RUN. High final acceptance: NOT_RUN.** Real manual workflow_dispatch, Windows 11 live visual, extended TOCTOU/UNC/permissions/race and browser UX not done. Official weighted verification `UNASSESSED`, product release HOLD.
+- No main, Production, permission change, secret/customer export, force push, EXE upload, or sale.

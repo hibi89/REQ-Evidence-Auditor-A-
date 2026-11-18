@@ -1,5 +1,5 @@
 # P2 검증 큐 — P1 완료 후보 이후 실행
-**현재:** 전항목 `DEFERRED/NOT_RUN`, 구현·검증 진행률 `UNASSESSED`.
+**현재 (2026-11-18 KST):** P2 자체 합성·Linux/Windows CI 검증 일부 `PASS/PARTIAL_PASS` (Run 44258446968); 독립 Codex/Astra·Windows 11 실환경·실제 workflow_dispatch는 `NOT_RUN`. 공식 가중 검증완료율 `UNASSESSED`. 상세 증거: [P2 verification report](P2_VERIFICATION_REPORT_20261118.md).
 | ID | 관련 REQ | 테스트 목표 | 위험 | 증거 조건 |
 |---|---|---|---|---|
 | P2-01 | 003-005,019-024 | 합성 REQ 30개/누락 10개/오탐·부분 구현 독립 정답셋 | 오판정 | fixture SHA, 기대/실제 차이 |
