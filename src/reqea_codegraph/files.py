@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import os
 import stat
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -38,6 +39,49 @@ def _check_path_components(root: Path, relative: str) -> None:
             raise ValueError("symlink_or_reparse_disallowed")
     if os.path.commonpath((os.path.realpath(root), os.path.realpath(current))) != os.path.realpath(root):
         raise ValueError("path_escape")
+
+
+def _check_windows_open_handle(root: Path, relative: str, descriptor: int) -> None:
+    """Fail closed before reading if Win32 resolves a handle outside its chosen path.
+
+    Python os.open on Windows cannot pin ancestor folders with dir_fd. A renamed
+    ancestor followed by a junction can retain the original inode while
+    resolving outside the selected source tree. Inspect the opened handle,
+    not a path string that may point to a different object by the time we read.
+    This is an additional guard, not an atomic defense against arbitrary
+    rename-back races or malicious filesystems.
+    """
+    if sys.platform != "win32":
+        return
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    get_name = kernel32.GetFinalPathNameByHandleW
+    get_name.argtypes = [wintypes.HANDLE, wintypes.LPWSTR, wintypes.DWORD, wintypes.DWORD]
+    get_name.restype = wintypes.DWORD
+    try:
+        handle = msvcrt.get_osfhandle(descriptor)
+        capacity = 32768
+        buffer = ctypes.create_unicode_buffer(capacity)
+        length = get_name(wintypes.HANDLE(handle), buffer, capacity, 0)
+        if length == 0 or length >= capacity:
+            raise ValueError("windows_open_handle_provenance_unavailable")
+        actual = buffer.value
+        # GetFinalPathNameByHandleW normally returns \\?\C:\\... . Reject
+        # unsupported namespace forms instead of treating them as safe.
+        prefix = "\\\\?\\"
+        if not actual.startswith(prefix):
+            raise ValueError("windows_open_handle_provenance_unavailable")
+        actual = actual[len(prefix):]
+        if len(actual) < 3 or actual[1:3] != ":\\":
+            raise ValueError("windows_open_handle_provenance_unavailable")
+        expected = os.path.normcase(os.path.abspath(root.joinpath(*relative.split("/"))))
+        if os.path.normcase(os.path.normpath(actual)) != expected:
+            raise ValueError("file_changed_or_unsafe")
+    except (OSError, OverflowError, TypeError) as exc:
+        raise ValueError("windows_open_handle_provenance_unavailable") from exc
 
 
 def _open_without_ancestor_links(root: Path, relative: str, flags: int) -> int:
@@ -79,6 +123,9 @@ def read_file(root: Path, entry: WalkFile, max_file_bytes: int) -> FileData:
     flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
     descriptor = _open_without_ancestor_links(root, entry.path, flags)
     try:
+        # Windows: validate opened HANDLE before any data is read; path-only
+        # checks would still permit an external file to be opened in a race.
+        _check_windows_open_handle(root, entry.path, descriptor)
         before = os.fstat(descriptor)
         if (not stat.S_ISREG(before.st_mode) or _is_reparse(before) or before.st_nlink > 1
                 or (before.st_dev, before.st_ino) != (entry.device, entry.inode)

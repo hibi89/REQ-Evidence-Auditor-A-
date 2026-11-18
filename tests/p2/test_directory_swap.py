@@ -46,6 +46,47 @@ class ReadDirectorySwapSafety(unittest.TestCase):
             self.assertEqual((relocated / "app.py").read_bytes(), original)
             self.assertTrue(directory.is_symlink())
 
+    @unittest.skipUnless(os.name == "nt", "Windows-only junction and Win32 handle test")
+    def test_windows_junction_swap_cannot_read_file_moved_outside_root(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as d:
+            base = Path(d)
+            root = base / "selected"
+            directory = root / "src"
+            directory.mkdir(parents=True)
+            source = directory / "app.py"
+            original = b"def original(): return 42\\n"
+            source.write_bytes(original)
+            entry = next(e for e in scan_tree(str(root), {}).files if e.path == "src/app.py")
+            moved = base / "original-moved-outside"
+            real_open = os.open
+            switched = False
+
+            def switch_during_open(path, flags, *args, **kwargs):
+                nonlocal switched
+                if not switched and str(path).endswith("app.py"):
+                    switched = True
+                    directory.rename(moved)
+                    mk = subprocess.run(["cmd", "/c", "mklink", "/J",
+                                         str(directory), str(moved)],
+                                        capture_output=True, text=True, timeout=15)
+                    if mk.returncode:
+                        raise RuntimeError("synthetic junction creation failed: " + mk.stderr)
+                return real_open(path, flags, *args, **kwargs)
+
+            with patch("reqea_codegraph.files.os.open", side_effect=switch_during_open):
+                with patch("reqea_codegraph.files.os.fdopen", side_effect=AssertionError(
+                    "out-of-tree file contents were read before Win32 validation")) as read_probe:
+                    with self.assertRaisesRegex(ValueError, "file_changed_or_unsafe"):
+                        read_file(root, entry, 2000000)
+                    read_probe.assert_not_called()
+            self.assertTrue(switched)
+            self.assertEqual((moved / "app.py").read_bytes(), original)
+            self.assertTrue(directory.is_junction())
+            # Dispose only synthetic junction, never source contents.
+            directory.rmdir()
+            self.assertEqual((moved / "app.py").read_bytes(), original)
+
     def test_unchanged_path_still_indexable(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
