@@ -62,6 +62,8 @@ def build_audit(root: str, requirements: str, *, policy_sha: str = "UNVERIFIED")
             return _unassessed(sha, warnings + ["C_invalid_finding_status"], policy_sha)
     except (ValueError, TypeError, KeyError, OSError):
         return _unassessed(sha, warnings + ["analysis_failed_without_verified_evidence"], policy_sha)
+    if not isinstance(result.get("warnings", []), list) or any(not isinstance(w, str) for w in result.get("warnings", [])):
+        return _unassessed(sha, warnings + ["C_invalid_warning_contract"], policy_sha)
     result["warnings"] = sorted(set(result.get("warnings", []) + warnings))
     result["policy_sha"] = policy_sha
     result["tool_version"] = TOOL_VERSION
