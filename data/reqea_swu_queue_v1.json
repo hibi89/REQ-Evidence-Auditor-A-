@@ -4,7 +4,7 @@
   "canonical_repo": "hibi89/REQ-Evidence-Auditor-A-",
   "contract_version": "reqea.v1",
   "central_policy_sha": "77a0d978bb5676c3867b11806461e8a043e627a9",
-  "phase": "P1_A_LOCAL_CODE_WRITTEN_BC_INTEGRATION_PENDING",
+  "phase": "P1_ABC_CODE_COPIED_INTEGRATION_SMOKE_UNVERIFIED",
   "official_implementation_rate": "UNASSESSED",
   "official_verification_rate": "UNASSESSED",
   "swus": [
@@ -107,11 +107,11 @@
       "initial_no_progress_attempts": 0,
       "redesign_no_progress_attempts": 0,
       "blocked_by": [
-        "B-05",
-        "C-04"
+        "A04_A05_A06_A07_LIVE_INTEGRATION_SMOKE"
       ],
       "source_written": true,
-      "local_minimum": "PASS_COMPILE_FAIL_CLOSED_SMOKE"
+      "local_minimum": "PASS_COMPILE_FAIL_CLOSED_SMOKE",
+      "integration_smoke": "NOT_CONFIRMED"
     },
     {
       "id": "A-05",
@@ -136,10 +136,11 @@
       "initial_no_progress_attempts": 0,
       "redesign_no_progress_attempts": 0,
       "blocked_by": [
-        "A-04"
+        "A04_A05_A06_A07_LIVE_INTEGRATION_SMOKE"
       ],
       "source_written": true,
-      "local_minimum": "PASS_COMPILE_FAIL_CLOSED_SMOKE"
+      "local_minimum": "PASS_COMPILE_FAIL_CLOSED_SMOKE",
+      "integration_smoke": "NOT_CONFIRMED"
     },
     {
       "id": "A-06",
@@ -163,10 +164,11 @@
       "initial_no_progress_attempts": 0,
       "redesign_no_progress_attempts": 0,
       "blocked_by": [
-        "A-05"
+        "A04_A05_A06_A07_LIVE_INTEGRATION_SMOKE"
       ],
       "source_written": true,
-      "local_minimum": "PASS_COMPILE_FAIL_CLOSED_SMOKE"
+      "local_minimum": "PASS_COMPILE_FAIL_CLOSED_SMOKE",
+      "integration_smoke": "NOT_CONFIRMED"
     },
     {
       "id": "A-07",
@@ -190,10 +192,11 @@
       "initial_no_progress_attempts": 0,
       "redesign_no_progress_attempts": 0,
       "blocked_by": [
-        "A-05"
+        "A04_A05_A06_A07_LIVE_INTEGRATION_SMOKE"
       ],
       "source_written": true,
-      "local_minimum": "PASS_COMPILE_FAIL_CLOSED_SMOKE"
+      "local_minimum": "PASS_COMPILE_FAIL_CLOSED_SMOKE",
+      "integration_smoke": "NOT_CONFIRMED"
     },
     {
       "id": "B-01",
@@ -208,12 +211,16 @@
         "src/reqea_codegraph/walk.py"
       ],
       "acceptance": "경로이탈·민감 파일 기본 제외, 제한 초과 경고",
-      "status": "READY",
-      "implementation_status": "NOT_STARTED",
+      "status": "IMPLEMENTED_UNVERIFIED",
+      "implementation_status": "IMPLEMENTED_UNVERIFIED",
       "verification_status": "NOT_RUN",
       "retry_stage": "NONE",
       "initial_no_progress_attempts": 0,
-      "redesign_no_progress_attempts": 0
+      "redesign_no_progress_attempts": 0,
+      "integrated_whitelisted": true,
+      "source_code_commit": "ff7741477727a42adb9a8db09019ebb1159834bf",
+      "file_sha256_verified": true,
+      "local_minimum": "PASS_3_OF_3_BY_B"
     },
     {
       "id": "B-02",
@@ -229,12 +236,16 @@
         "src/reqea_codegraph/files.py"
       ],
       "acceptance": "같은 내용에 deterministic SHA256/path",
-      "status": "READY",
-      "implementation_status": "NOT_STARTED",
+      "status": "IMPLEMENTED_UNVERIFIED",
+      "implementation_status": "IMPLEMENTED_UNVERIFIED",
       "verification_status": "NOT_RUN",
       "retry_stage": "NONE",
       "initial_no_progress_attempts": 0,
-      "redesign_no_progress_attempts": 0
+      "redesign_no_progress_attempts": 0,
+      "integrated_whitelisted": true,
+      "source_code_commit": "ff7741477727a42adb9a8db09019ebb1159834bf",
+      "file_sha256_verified": true,
+      "local_minimum": "PASS_3_OF_3_BY_B"
     },
     {
       "id": "B-03",
@@ -250,12 +261,16 @@
         "src/reqea_codegraph/python_ast.py"
       ],
       "acceptance": "코드 실행 없이 함수/클래스/라인 출력",
-      "status": "READY",
-      "implementation_status": "NOT_STARTED",
+      "status": "IMPLEMENTED_UNVERIFIED",
+      "implementation_status": "IMPLEMENTED_UNVERIFIED",
       "verification_status": "NOT_RUN",
       "retry_stage": "NONE",
       "initial_no_progress_attempts": 0,
-      "redesign_no_progress_attempts": 0
+      "redesign_no_progress_attempts": 0,
+      "integrated_whitelisted": true,
+      "source_code_commit": "ff7741477727a42adb9a8db09019ebb1159834bf",
+      "file_sha256_verified": true,
+      "local_minimum": "PASS_3_OF_3_BY_B"
     },
     {
       "id": "B-04",
@@ -272,12 +287,16 @@
         "src/reqea_codegraph/relations.py"
       ],
       "acceptance": "관계 후보와 동적 해석 미지원 경고",
-      "status": "READY",
-      "implementation_status": "NOT_STARTED",
+      "status": "IMPLEMENTED_UNVERIFIED",
+      "implementation_status": "IMPLEMENTED_UNVERIFIED",
       "verification_status": "NOT_RUN",
       "retry_stage": "NONE",
       "initial_no_progress_attempts": 0,
-      "redesign_no_progress_attempts": 0
+      "redesign_no_progress_attempts": 0,
+      "integrated_whitelisted": true,
+      "source_code_commit": "ff7741477727a42adb9a8db09019ebb1159834bf",
+      "file_sha256_verified": true,
+      "local_minimum": "PASS_3_OF_3_BY_B"
     },
     {
       "id": "B-05",
@@ -297,12 +316,16 @@
         "src/reqea_codegraph/__init__.py"
       ],
       "acceptance": "계약 JSON, 개별 실패/scan truncate 표시",
-      "status": "READY",
-      "implementation_status": "NOT_STARTED",
+      "status": "IMPLEMENTED_UNVERIFIED",
+      "implementation_status": "IMPLEMENTED_UNVERIFIED",
       "verification_status": "NOT_RUN",
       "retry_stage": "NONE",
       "initial_no_progress_attempts": 0,
-      "redesign_no_progress_attempts": 0
+      "redesign_no_progress_attempts": 0,
+      "integrated_whitelisted": true,
+      "source_code_commit": "ff7741477727a42adb9a8db09019ebb1159834bf",
+      "file_sha256_verified": true,
+      "local_minimum": "PASS_3_OF_3_BY_B"
     },
     {
       "id": "C-01",
@@ -317,12 +340,16 @@
         "src/reqea_evidence/matcher.py"
       ],
       "acceptance": "동일 경로/심볼 근거 후보 및 criteria 별 불명확성",
-      "status": "READY",
-      "implementation_status": "NOT_STARTED",
+      "status": "IMPLEMENTED_UNVERIFIED",
+      "implementation_status": "IMPLEMENTED_UNVERIFIED",
       "verification_status": "NOT_RUN",
       "retry_stage": "NONE",
       "initial_no_progress_attempts": 0,
-      "redesign_no_progress_attempts": 0
+      "redesign_no_progress_attempts": 0,
+      "integrated_whitelisted": true,
+      "source_code_commit": "7a3c760ea36f0fbb5fcfdf41aadfb5aa976c7f60",
+      "file_sha256_verified": true,
+      "local_minimum": "PASS_15_OF_15_BY_C"
     },
     {
       "id": "C-02",
@@ -339,12 +366,16 @@
         "src/reqea_evidence/classify.py"
       ],
       "acceptance": "미지원/제한 scan 시 false PASS/false GAP 금지",
-      "status": "READY",
-      "implementation_status": "NOT_STARTED",
+      "status": "IMPLEMENTED_UNVERIFIED",
+      "implementation_status": "IMPLEMENTED_UNVERIFIED",
       "verification_status": "NOT_RUN",
       "retry_stage": "NONE",
       "initial_no_progress_attempts": 0,
-      "redesign_no_progress_attempts": 0
+      "redesign_no_progress_attempts": 0,
+      "integrated_whitelisted": true,
+      "source_code_commit": "7a3c760ea36f0fbb5fcfdf41aadfb5aa976c7f60",
+      "file_sha256_verified": true,
+      "local_minimum": "PASS_15_OF_15_BY_C"
     },
     {
       "id": "C-03",
@@ -361,12 +392,16 @@
         "src/reqea_evidence/provenance.py"
       ],
       "acceptance": "다른 SHA 근거 합치지 않고 warnings로 처리",
-      "status": "READY",
-      "implementation_status": "NOT_STARTED",
+      "status": "IMPLEMENTED_UNVERIFIED",
+      "implementation_status": "IMPLEMENTED_UNVERIFIED",
       "verification_status": "NOT_RUN",
       "retry_stage": "NONE",
       "initial_no_progress_attempts": 0,
-      "redesign_no_progress_attempts": 0
+      "redesign_no_progress_attempts": 0,
+      "integrated_whitelisted": true,
+      "source_code_commit": "7a3c760ea36f0fbb5fcfdf41aadfb5aa976c7f60",
+      "file_sha256_verified": true,
+      "local_minimum": "PASS_15_OF_15_BY_C"
     },
     {
       "id": "C-04",
@@ -385,12 +420,16 @@
         "src/reqea_evidence/__init__.py"
       ],
       "acceptance": "정렬된 findings, status/summary 일관",
-      "status": "READY",
-      "implementation_status": "NOT_STARTED",
+      "status": "IMPLEMENTED_UNVERIFIED",
+      "implementation_status": "IMPLEMENTED_UNVERIFIED",
       "verification_status": "NOT_RUN",
       "retry_stage": "NONE",
       "initial_no_progress_attempts": 0,
-      "redesign_no_progress_attempts": 0
+      "redesign_no_progress_attempts": 0,
+      "integrated_whitelisted": true,
+      "source_code_commit": "7a3c760ea36f0fbb5fcfdf41aadfb5aa976c7f60",
+      "file_sha256_verified": true,
+      "local_minimum": "PASS_15_OF_15_BY_C"
     },
     {
       "id": "C-05",
@@ -408,12 +447,16 @@
         "src/reqea_evidence/report.py"
       ],
       "acceptance": "untrusted title/path escape, secret/code full text 제외",
-      "status": "READY",
-      "implementation_status": "NOT_STARTED",
+      "status": "IMPLEMENTED_UNVERIFIED",
+      "implementation_status": "IMPLEMENTED_UNVERIFIED",
       "verification_status": "NOT_RUN",
       "retry_stage": "NONE",
       "initial_no_progress_attempts": 0,
-      "redesign_no_progress_attempts": 0
+      "redesign_no_progress_attempts": 0,
+      "integrated_whitelisted": true,
+      "source_code_commit": "7a3c760ea36f0fbb5fcfdf41aadfb5aa976c7f60",
+      "file_sha256_verified": true,
+      "local_minimum": "PASS_15_OF_15_BY_C"
     }
   ],
   "p1_local_candidate_swus": [
@@ -422,5 +465,33 @@
     "A-03"
   ],
   "p1_local_candidate_count": 3,
-  "p1_local_total_swus": 17
+  "p1_local_total_swus": 17,
+  "p1_candidate_swu_ids": [
+    "A-01",
+    "A-02",
+    "A-03",
+    "B-01",
+    "B-02",
+    "B-03",
+    "B-04",
+    "B-05",
+    "C-01",
+    "C-02",
+    "C-03",
+    "C-04",
+    "C-05"
+  ],
+  "p1_candidate_count": 13,
+  "p1_planned_swus": 17,
+  "integration_source_commits": {
+    "A": "6dbeffc3348547e5a6e2a9c885993afcf0aa30a1",
+    "B": "ff7741477727a42adb9a8db09019ebb1159834bf",
+    "C": "7a3c760ea36f0fbb5fcfdf41aadfb5aa976c7f60"
+  },
+  "integration_merged_commits": {
+    "A": "b3ca3eeb367b85d5709b0b862a075d1c2a8d211c",
+    "B": "ab6878ae6608c48d36887e985c11505a292bd5b4",
+    "C": "d423fea91668affd691c399918e3f16b06954501"
+  },
+  "integration_smoke": "NOT_CONFIRMED"
 }
