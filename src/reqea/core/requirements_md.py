@@ -8,7 +8,7 @@ SCHEMA_VERSION = "reqea.v1"
 _ID = re.compile(r"^REQ-\d{3}$")
 _HEADING = re.compile(r"^\s{0,3}#{1,6}\s+(REQ-\d{3})(?:\s*[-:—]\s*|\s+)?(.*)$")
 _ANY_ID = re.compile(r"\bREQ-[A-Za-z0-9-]+\b")
-_REF = re.compile(r"(?<![\w/])((?:src|tests|docs|\.github)/[A-Za-z0-9_./-]+\.[A-Za-z0-9_+-]+)")
+_REF = re.compile(r"(?<![\w/])((?:src|tests|docs|\.github)/[\w./+-]+\.[\w+-]+)")
 _CRITERIA = re.compile(r"^(?:\*\*)?(?:acceptance(?:\s+criteria)?|수용\s*조건|수용\s*기준)(?:\*\*)?\s*[:：-]?\s*(.*)$", re.I)
 _SHA = re.compile(r"[0-9a-fA-F]{40}\Z")
 
@@ -55,6 +55,7 @@ def parse_markdown_requirements(
     current: dict | None = None
     in_criteria = False
     in_fence = False
+    table_headers: list[str] | None = None
 
     def add(req_id: str, title: str, description: str = "", criteria: list[str] | None = None) -> dict:
         if not _ID.fullmatch(req_id) or req_id in seen:
@@ -82,12 +83,27 @@ def parse_markdown_requirements(
             continue
         if stripped.startswith("|") and stripped.endswith("|"):
             cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+            if cells and cells[0].lower() in ("id", "req-id", "req_id"):
+                table_headers = [h.lower() for h in cells]
+                continue
             if cells and _ID.fullmatch(cells[0]):
                 if len(cells) < 2:
                     raise ValueError("malformed REQ table row")
                 title = cells[1]
-                description = cells[2] if len(cells) > 2 else ""
-                criteria = [v.strip() for v in re.split(r"<br\s*/?>|\s*;\s*", cells[3], flags=re.I) if v.strip()] if len(cells) > 3 else []
+                description = ""
+                criteria: list[str] = []
+                if table_headers and len(table_headers) == len(cells):
+                    description_idx = next((i for i, h in enumerate(table_headers) if
+                                            h in ("description", "설명", "details", "상세 설명")), None)
+                    if description_idx is not None:
+                        description = cells[description_idx]
+                    criteria_idx = next((i for i, h in enumerate(table_headers) if
+                                         "acceptance" in h or "수용" in h), None)
+                    if criteria_idx is not None:
+                        criteria = [v.strip() for v in re.split(r"<br\s*/?>|\s*;\s*", cells[criteria_idx], flags=re.I) if v.strip()]
+                else:
+                    description = cells[2] if len(cells) > 2 else ""
+                    criteria = [v.strip() for v in re.split(r"<br\s*/?>|\s*;\s*", cells[3], flags=re.I) if v.strip()] if len(cells) > 3 else []
                 current = add(cells[0], title, description, criteria)
                 in_criteria = False
             continue
@@ -110,7 +126,7 @@ def parse_markdown_requirements(
     for record in records:
         if not record["acceptance_criteria"]:
             warnings.append(f"{record['req_id']}:missing_acceptance_criteria")
-        record["explicit_refs"] = _refs("\n".join([record["description"], *record["acceptance_criteria"]]))
+        record["explicit_refs"] = _refs("\n".join([record["title"], record["description"], *record["acceptance_criteria"]]))
     for value in sorted(set(_ANY_ID.findall(text)) - seen):
         if not _ID.fullmatch(value):
             warnings.append(f"unsupported_req_id:{value}")
