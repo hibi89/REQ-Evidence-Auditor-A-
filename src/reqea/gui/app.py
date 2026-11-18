@@ -54,8 +54,11 @@ class AuditorApp(tk.Tk):
     def _run(self, values: dict[str, str], overwrite: bool) -> None:
         try:
             audit = build_audit(values["repo"], values["requirements"])
-            if "required_B_or_C_module_unavailable" in audit.get("warnings", []):
-                self.messages.put((False, "B/C 모듈 미통합: UNASSESSED (결과 저장 없음)"))
+            if any(w in audit.get("warnings", []) for w in ("required_B_or_C_module_unavailable",
+                    "B_contract_or_SHA_mismatch", "C_contract_or_SHA_mismatch",
+                    "C_invalid_or_untrusted_status", "C_invalid_finding_status",
+                    "C_invalid_warning_contract", "analysis_failed_without_verified_evidence")):
+                self.messages.put((False, "B/C 계약/모듈 미준비: UNASSESSED (결과 저장 없음)"))
                 return
             html = render_audit_html(audit)
             info = save_artifacts(audit, html, source_root=values["repo"],
