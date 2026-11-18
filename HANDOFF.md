@@ -26,3 +26,9 @@ Date: 2026-11-18 15:44 KST. Owner: A integration lead. Product `hibi89/REQ-Evide
 - Windows path false rejects and junction protection repaired in A integration; code and P2 tests at exact SHA. See `docs/P2_VERIFICATION_REPORT_20261118.md`.
 - **P2 independent technical/security by Codex Sol Max: NOT_RUN. Astra Max UX: NOT_RUN. High final acceptance: NOT_RUN.** Real manual workflow_dispatch, Windows 11 live visual, extended TOCTOU/UNC/permissions/race and browser UX not done. Official weighted verification `UNASSESSED`, product release HOLD.
 - No main, Production, permission change, secret/customer export, force push, EXE upload, or sale.
+
+## 2026-11-18 P2-02 advanced boundary re-verification
+- Exact verified source SHA `d08eb924c59d73ea287e28c18c24bb23abdf122d`, Actions [Run 44260061253](https://github.com/hibi89/REQ-Evidence-Auditor-A-/actions/runs/44260061253) SUCCESS 5/5. Windows 45/45 PASS, Linux 42 PASS + 3 SKIP. Additional 9 P2 adversarial synthetic scenarios committed at `100dfef06e757651b1756ceddf12aaa3fe168217`; fix hardlinked requirements at `ae0cbcd766bd4c4c3a842b0558001e1b343e6649`; final Tk harness adjustment at `d08eb924c59d73ea287e28c18c24bb23abdf122d`.
+- P2-02 source path hardlink, UNC/junction, symlink, permission and long Unicode path handling expanded. No customer data, secrets or EXE exported. Static Bandit, Windows EXEs, Tk callback and checkout read-only scan PASS at exact run.
+- Reference gate distribution scoped P2-03 1/9 PASS (11.1% unweighted); seven partial, P2-09 NOT_RUN. **Official weighted verification UNASSESSED**, independent Codex/Astra and Windows 11 real-user gates NOT_RUN.
+- See detailed `docs/P2_VERIFICATION_REPORT_20261118.md` for exact job IDs and limitations. No main merge or release.
