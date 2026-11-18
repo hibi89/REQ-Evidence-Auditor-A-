@@ -12,3 +12,6 @@
 | P2-08 | 전체 | 전체 CI, build, recovery, negative, static security, integration | 종합 | Codex Sol Max 독립 검증 PASS |
 | P2-09 | 전체 | Astra Max UI/UX 독립 감사, High 전수 인수 | UI/고유 계약 | 실제 검수 수행 증거 |
 기존 자동화/보안 게이트는 생략하거나 비활성화하지 않는다. P1 실제 실행에 위험이 발생하는 변화는 P2까지 무작정 미루지 말고 즉시 HOLD.
+
+## 2026-11-18 latest P2 update
+Current reference: [run 44261707248](https://github.com/hibi89/REQ-Evidence-Auditor-A-/actions/runs/44261707248) at `61352c583c072a95ba8e14e91b0b114e54a92125` PASS 5/5; Windows 48 PASS, Linux 45 PASS + 3 SKIP. Added same-size replaced REQ SHA256 defense and injected no-clobber rollback PASS. P2-02 and P2-08 remain PARTIAL until explicit-overwrite/crash recovery, broader concurrency, and independent audit. Official verification rate UNASSESSED, not 100%.

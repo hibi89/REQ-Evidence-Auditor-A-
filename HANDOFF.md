@@ -32,3 +32,8 @@ Date: 2026-11-18 15:44 KST. Owner: A integration lead. Product `hibi89/REQ-Evide
 - P2-02 source path hardlink, UNC/junction, symlink, permission and long Unicode path handling expanded. No customer data, secrets or EXE exported. Static Bandit, Windows EXEs, Tk callback and checkout read-only scan PASS at exact run.
 - Reference gate distribution scoped P2-03 1/9 PASS (11.1% unweighted); seven partial, P2-09 NOT_RUN. **Official weighted verification UNASSESSED**, independent Codex/Astra and Windows 11 real-user gates NOT_RUN.
 - See detailed `docs/P2_VERIFICATION_REPORT_20261118.md` for exact job IDs and limitations. No main merge or release.
+
+## 2026-11-18 P2 TOCTOU/restore evidence update
+- Latest verified exact source `61352c583c072a95ba8e14e91b0b114e54a92125`; [Actions 44261707248](https://github.com/hibi89/REQ-Evidence-Auditor-A-/actions/runs/44261707248) SUCCESS 5/5 jobs; Windows 48 PASS/0 SKIP, Linux 45 PASS/3 SKIP. B 4 + C 17 + integration 3 + P2 24 cases per OS, including latest fault injection.
+- Fixed same-sized REQ input replacement escaping Windows file-ID equivalence by validating SHA256 at initial/read time; fixed partial result files surviving an injected second-file no-clobber write failure, with original unrelated file intact. Code revisions `69e2e1bbcdf6dd928580afc69cae50637d36feda` and `61352c583c072a95ba8e14e91b0b114e54a92125`.
+- Official P2 verification rate UNASSESSED; gate counts 1 scoped PASS, 7 PARTIAL, 1 NOT_RUN (unweighted 11.1% reference). `--overwrite` atomic set/crash recovery remains NOT_RUN; Windows 11 real-device UI, manual workflow_dispatch, Codex Sol Max independent security and Astra Max independent UI/UX not performed. Owner release GO HOLD.
