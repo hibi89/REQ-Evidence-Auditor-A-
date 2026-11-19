@@ -55,6 +55,9 @@ class AuditorApp(tk.Tk):
         self._watch_out = ""
         self._watch_source_root: str | None = None
         self._watch_token: str | None = None
+        # The approved foreground watch is bound to the exact GUI source
+        # selection. Editing the URL/ref/doc/output requires a new opt-in.
+        self._watch_input_scope: tuple[str, ...] | None = None
         self._closing = False
 
         content = ttk.Frame(self, padding=14)
@@ -120,8 +123,36 @@ class AuditorApp(tk.Tk):
         ttk.Label(content, textvariable=self.status_text, wraplength=730,
                   justify="left").pack(fill="x", anchor="w", pady=8)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+        for setting in (self.mode, *self.paths.values(), self.remote_url,
+                        self.remote_ref, self.document_choice, self.profile_choice):
+            setting.trace_add("write", self._on_watch_input_changed)
         self.after(100, self.poll)
         self.after(1200, self._watch_cycle)
+
+    def _watch_scope_inputs(self) -> tuple[str, ...]:
+        """Only monitor inputs relevant to the active source mode and output."""
+        mode = self.mode.get()
+        output = self.paths["out"].get().strip()
+        if mode == "local":
+            return (mode, self.paths["repo"].get().strip(),
+                    self.paths["requirements"].get().strip(), output)
+        if mode == "github":
+            return (mode, self.remote_url.get().strip(),
+                    self.remote_ref.get().strip(), self.document_choice.get().strip(),
+                    output)
+        if mode == "registered":
+            return (mode, self.profile_choice.get(), output)
+        return (mode, output)
+
+    def _on_watch_input_changed(self, *_args: str) -> None:
+        # Trace callbacks run at the moment a Tk selection changes, before
+        # the next timer/event. Explicit STOP cancels queued and in-flight GETs.
+        scope = self._watch_input_scope
+        if scope is not None and self._watch_scope_inputs() != scope:
+            self.stop_watch()
+            if not self._closing:
+                self.status_text.set(
+                    "감시 중지 · 선택 소스/정본/결과 폴더 변경됨 · 재시작 시 명시적 승인 필요")
 
     def mode_changed(self) -> None:
         if self._watcher is not None or self._watch_busy:
@@ -385,6 +416,7 @@ class AuditorApp(tk.Tk):
         gen = self._watch_generation
         self._watch_busy = True
         self._starting_watcher = watcher
+        self._watch_input_scope = self._watch_scope_inputs()
         self.watch_button.state(["disabled"])
         self.status_text.set("선택 프로젝트 감시를 명시적으로 시작 중...")
         threading.Thread(target=self._watch_start_worker,
@@ -407,6 +439,7 @@ class AuditorApp(tk.Tk):
             pending = self._starting_watcher
             self._watcher = None
             self._starting_watcher = None
+            self._watch_input_scope = None
             self._watch_busy = False
             # A worker might not have entered watcher.start() yet. An ordinary
             # stop() alone would permit that delayed start to re-activate it.
@@ -517,6 +550,7 @@ class AuditorApp(tk.Tk):
                     self.status_text.set("선택한 프로젝트 감시 ON · 변경 전에는 재분석/이력 저장 없음")
                 else:
                     self._watcher = None
+                    self._watch_input_scope = None
                     self.status_text.set("감시 시작 실패 · 범위/권한/정본 재확인")
             elif kind == "watch_tick":
                 if gen != self._watch_generation:
@@ -529,6 +563,7 @@ class AuditorApp(tk.Tk):
                     self.status_text.set(f"REQ 근거·상태 변화 {payload['changed_count']}개 · 이력 {payload['saved']} · P2 NOT_RUN")
                 elif payload.get("status") in ("PAUSED", "STOPPED"):
                     self._watcher = None
+                    self._watch_input_scope = None
                     self.watch_button.state(["!disabled"])
                     self.status_text.set("감시 일시중지 · 정본/경합/출력 파일 점검 (UNASSESSED)")
                 elif payload.get("status") == "BACKOFF":

@@ -146,6 +146,23 @@ with tempfile.TemporaryDirectory() as d:
             pump(app, lambda: "REQ 근거·상태 변화 1개" in app.status_text.get(),
                  "GUI watch change and saved history")
             assert list((v11out / "reqea-history").glob("reqea-delta-*.json"))
+            # Editing an unrelated remote input must not cancel a local watch.
+            app.remote_ref.set("feature/not-selected")
+            assert watcher.active
+            # Editing the approved output/source while watching must STOP
+            # immediately; it must not keep polling the old source silently.
+            preserved = sorted((v11out / "reqea-history").glob("reqea-delta-*.json"))
+            app.paths["out"].set(str(base / "different-output"))
+            assert not watcher.active and app._watcher is None
+            assert app._watch_input_scope is None
+            assert "감시 중지" in app.status_text.get()
+            assert sorted((v11out / "reqea-history").glob("reqea-delta-*.json")) == preserved
+            app.paths["out"].set(str(v11out))
+            app.remote_ref.set("")
+            app.start_watch()
+            pump(app, lambda: app._watcher is not None and app._watcher.active,
+                 "re-consented local watch after changing output")
+            watcher = app._watcher
             app.stop_watch()
             assert not watcher.active, "Stop must make subsequent polling inactive"
             # STOP between clicking Start and worker entry must cancel
@@ -198,6 +215,18 @@ with tempfile.TemporaryDirectory() as d:
                 pump(app, lambda: "저장:" in app.status_text.get()
                      and app.start_button.instate(["!disabled"]), "GUI public GitHub source audit")
             assert (v11out / "manifest.json").is_file()
+            # Changing a GitHub ref while its start worker has not run must
+            # revoke permission before the first network request.
+            with patch("reqea.gui.app.threading.Thread.start") as queued:
+                app.start_watch()
+                pending_remote = app._starting_watcher
+                assert pending_remote is not None
+                queued.assert_called_once()
+                app.remote_ref.set("feature/other-ref")
+                assert app._starting_watcher is None and app._watcher is None
+                assert pending_remote.start(now=0)["status"] == "STOPPED"
+                assert not pending_remote.active
+            app.remote_ref.set("main")
             print("V1.1 registered project, opt-in watch, local-only delta and "
                   "public-GitHub GUI source route: synthetic PASS; live network NOT_RUN")
 
