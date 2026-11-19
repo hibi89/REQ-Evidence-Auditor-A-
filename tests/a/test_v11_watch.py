@@ -454,9 +454,13 @@ class ChangeWatchSynthetic(unittest.TestCase):
             root = Path(d) / "source"
             req = _project(root)
             local = LocalChangeWatch(str(root), str(req))
-            with self.assertRaisesRegex(ValueError, "timestamp"):
-                local.start(now=float("nan"))
+            with patch("reqea.core.watch.discover_local_requirements") as discover:
+                with self.assertRaisesRegex(ValueError, "timestamp"):
+                    local.start(now=float("nan"))
+                discover.assert_not_called()
             self.assertFalse(local.active)
+            self.assertIsNone(local._audit)
+            self.assertIsNone(local._fingerprint)
             local.start(now=0)
             prior = local._audit
             with self.assertRaisesRegex(ValueError, "timestamp"):
@@ -471,6 +475,13 @@ class ChangeWatchSynthetic(unittest.TestCase):
 
             remote = PublicGitHubChangeWatch("https://github.com/o/r",
                                               "main", "requirements.md")
+            with patch("reqea.core.watch.public_github_snapshot") as opener:
+                with self.assertRaisesRegex(ValueError, "timestamp"):
+                    remote.start(now=float("-inf"))
+                opener.assert_not_called()
+            self.assertFalse(remote.active)
+            self.assertIsNone(remote._audit)
+            self.assertIsNone(remote._head)
             with patch("reqea.core.watch.public_github_snapshot",
                        side_effect=fake_snapshot):
                 remote.start(now=0)

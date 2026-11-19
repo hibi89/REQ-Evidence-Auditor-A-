@@ -100,6 +100,9 @@ class LocalChangeWatch:
         self._cancel_pending_start = False
 
     def start(self, *, now: float | None = None) -> dict:
+        # Reject nonfinite caller clocks before scanning or any public HTTPS read.
+        # Default monotonic time is sampled at commit, AFTER long analysis.
+        supplied_moment = _poll_time(now) if now is not None else None
         """Explicit opt-in only; do not persist any source or automatically save."""
         with self._state_lock:
             if self._cancel_pending_start:
@@ -134,7 +137,7 @@ class LocalChangeWatch:
             self._audit = candidate
             self._fingerprint = later_fingerprint
             self._pending = None
-            self._checked_at = _poll_time(now)
+            self._checked_at = _poll_time(None) if supplied_moment is None else supplied_moment
             self._generation += 1
             self.active = True
             return {"status": "STARTED", "audit": self._audit,
@@ -250,6 +253,9 @@ class PublicGitHubChangeWatch:
         self._cancel_pending_start = False
 
     def start(self, *, now: float | None = None) -> dict:
+        # Reject nonfinite caller clocks before scanning or any public HTTPS read.
+        # Default monotonic time is sampled at commit, AFTER long analysis.
+        supplied_moment = _poll_time(now) if now is not None else None
         """Explicit consent begins one pinned public snapshot analysis."""
         with self._state_lock:
             if self._cancel_pending_start:
@@ -265,7 +271,7 @@ class PublicGitHubChangeWatch:
             self._document_digest = selection["sha256"]
             self._audit = audit
             self._head = head
-            self._checked_at = _poll_time(now)
+            self._checked_at = _poll_time(None) if supplied_moment is None else supplied_moment
             self._backoff = self.interval
             self._generation += 1
             self.active = True
