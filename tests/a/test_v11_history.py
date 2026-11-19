@@ -27,8 +27,11 @@ class DeltaHistory(unittest.TestCase):
         self.assertEqual(result["status"], "CANDIDATE_DIFF_ONLY")
         self.assertEqual(result["verification_status"], "NOT_RUN")
         self.assertEqual(result["changed_count"], 1)
-        self.assertEqual(result["changes"][0], {
-            "req_id": "REQ-001", "before": "GAP_CANDIDATE", "after": "CODE_CANDIDATE"})
+        self.assertEqual(result["changes"][0]["req_id"], "REQ-001")
+        self.assertEqual(result["changes"][0]["before"], "GAP_CANDIDATE")
+        self.assertEqual(result["changes"][0]["after"], "CODE_CANDIDATE")
+        self.assertEqual(result["changes"][0]["before_evidence_count"], 1)
+        self.assertEqual(result["before"]["scope"]["req_count"], 1)
         self.assertNotIn("SECRETS_IN_SOURCE_NEVER_EXPORT", json.dumps(result))
         self.assertNotIn("/private/", json.dumps(result))
 
@@ -56,6 +59,19 @@ class DeltaHistory(unittest.TestCase):
             self.assertEqual(again["status"], "EXISTS")
             self.assertEqual(foreign.read_bytes(), b"OWNER")
             self.assertEqual((root / "app.py").read_bytes(), b"keep original")
+
+    def test_evidence_change_with_same_candidate_status_is_not_lost(self):
+        before = audit("CODE_CANDIDATE")
+        after = audit("CODE_CANDIDATE")
+        after["findings"][0]["evidence"].append({"path": "/secret/NON_EXPORT"})
+        result = compare_audits(before, after)
+        self.assertEqual(result["changed_count"], 1)
+        self.assertEqual(result["changes"][0]["before"], "CODE_CANDIDATE")
+        self.assertEqual(result["changes"][0]["after"], "CODE_CANDIDATE")
+        self.assertEqual(result["changes"][0]["before_evidence_count"], 1)
+        self.assertEqual(result["changes"][0]["after_evidence_count"], 2)
+        self.assertEqual(result["after"]["scope"]["evidence_count"], 2)
+        self.assertNotIn("/secret/NON_EXPORT", json.dumps(result))
 
     def test_source_interior_and_malformed_audit_rejected(self):
         with tempfile.TemporaryDirectory() as d:
@@ -128,12 +144,18 @@ class DeltaHistory(unittest.TestCase):
             import contextlib, io
             stdout=io.StringIO()
             with contextlib.redirect_stdout(stdout):
-                rc=main(["compare","--before",str(prior),"--after",str(current),"--out",str(out)])
+                rc=main(["compare","--before",str(prior),"--after",str(current),
+                         "--source-root",str(base),"--out",str(out)])
             self.assertEqual(rc,0)
             summary=json.loads(stdout.getvalue())
             self.assertEqual(summary["status"],"CANDIDATE_DIFF_ONLY")
             self.assertEqual(summary["changed_count"],1)
             self.assertEqual(summary["verification_status"],"NOT_RUN")
+            denied = main(["compare", "--before", str(prior), "--after", str(current),
+                           "--source-root", str(base), "--out", str(base / "unsafe")])
+            self.assertEqual(denied, 2)
+            self.assertFalse((base / "unsafe").exists())
+
 
 
 if __name__ == "__main__":

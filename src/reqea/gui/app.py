@@ -506,7 +506,7 @@ class AuditorApp(tk.Tk):
                     continue
                 if payload.get("status") == "CHANGED":
                     self._watch_token = payload.get("token")
-                    self.status_text.set(f"REQ 상태 변경 {payload['changed_count']}개 · 이력 {payload['saved']} · P2 NOT_RUN")
+                    self.status_text.set(f"REQ 근거·상태 변화 {payload['changed_count']}개 · 이력 {payload['saved']} · P2 NOT_RUN")
                 elif payload.get("status") in ("PAUSED", "STOPPED"):
                     self._watcher = None
                     self.watch_button.state(["!disabled"])

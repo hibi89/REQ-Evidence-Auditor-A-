@@ -137,7 +137,7 @@ with tempfile.TemporaryDirectory() as d:
                      "fingerprint": "a" * 64}):
                 app._watch_tick_worker(app._watch_generation, watcher,
                                        str(v11out), str(small), app._watch_token)
-            pump(app, lambda: "REQ 상태 변경 1개" in app.status_text.get(),
+            pump(app, lambda: "REQ 근거·상태 변화 1개" in app.status_text.get(),
                  "GUI watch change and saved history")
             assert list((v11out / "reqea-history").glob("reqea-delta-*.json"))
             app.stop_watch()

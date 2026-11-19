@@ -43,7 +43,7 @@ def main(argv: list[str] | None = None) -> int:
     compare.add_argument("--before", required=True, help="Explicit prior audit.json")
     compare.add_argument("--after", required=True, help="Explicit current audit.json")
     compare.add_argument("--out", required=True, help="Approved local output folder")
-    compare.add_argument("--source-root", help="Optional root to enforce output outside scanned source")
+    compare.add_argument("--source-root", required=True, help="Audited source root; history output must be outside")
 
     args = parser.parse_args(argv)
     try:
