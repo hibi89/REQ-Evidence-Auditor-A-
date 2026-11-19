@@ -72,6 +72,7 @@ class LocalChangeWatch:
         self._pending: tuple[str, float] | None = None
         self._checked_at = float("-inf")
         self._audit: dict | None = None
+        self._generation = 0
 
     def start(self, *, now: float | None = None) -> dict:
         """Explicit opt-in only; do not persist any source or automatically save."""
@@ -84,19 +85,30 @@ class LocalChangeWatch:
                 raise ValueError("canonical requirements must be inside selected root") from exc
         selected = select_requirements(found, selected_path.as_posix())
         self.requirements = selected["requirements_path"]
-        self._baseline_doc = selected["sha256"]
-        self._audit = build_audit(self.root, selected["requirements_path"])
-        if _FATAL.intersection(self._audit.get("warnings", [])):
+        # Do not bless an initial audit if source changed mid-analysis.
+        initial_fingerprint = _local_fingerprint(self.root)
+        candidate = build_audit(self.root, selected["requirements_path"])
+        if _FATAL.intersection(candidate.get("warnings", [])):
             raise ValueError("initial local audit unavailable")
-        self._fingerprint = _local_fingerprint(self.root)
+        later_fingerprint = _local_fingerprint(self.root)
+        if initial_fingerprint != later_fingerprint:
+            raise ValueError("local source changed during initial audit")
+        source = inspect_local_source(self.root, selected["requirements_path"])
+        if hashlib.sha256(read_checked_requirements(source)).hexdigest() != selected["sha256"]:
+            raise ValueError("canonical requirements changed during initial audit")
+        self._baseline_doc = selected["sha256"]
+        self._audit = candidate
+        self._fingerprint = later_fingerprint
         self._pending = None
         self._checked_at = time.monotonic() if now is None else float(now)
+        self._generation += 1
         self.active = True
         return {"status": "STARTED", "audit": self._audit,
                 "fingerprint": self._fingerprint, "verification_status": "NOT_RUN"}
 
     def stop(self) -> dict:
         self.active = False
+        self._generation += 1
         self._pending = None
         return {"status": "STOPPED"}
 
@@ -104,6 +116,7 @@ class LocalChangeWatch:
         """One bounded owner-driven poll; returns new audit only after stable change."""
         if not self.active:
             return {"status": "STOPPED"}
+        generation = self._generation
         moment = time.monotonic() if now is None else float(now)
         if moment - self._checked_at < self.interval:
             return {"status": "WAIT"}
@@ -125,9 +138,17 @@ class LocalChangeWatch:
             new_audit = build_audit(self.root, self.requirements)
             if _FATAL.intersection(new_audit.get("warnings", [])):
                 raise ValueError("new local audit contract incomplete")
+            if _local_fingerprint(self.root) != fingerprint:
+                raise ValueError("local source changed during audit")
+            source = inspect_local_source(self.root, self.requirements)
+            if hashlib.sha256(read_checked_requirements(source)).hexdigest() != self._baseline_doc:
+                raise ValueError("canonical requirements changed during audit")
         except (ValueError, OSError, UnicodeError):
             self.active = False
+            self._generation += 1
             return {"status": "PAUSED", "reason": "LOCAL_INPUT_CHANGED_OR_UNSAFE"}
+        if not self.active or generation != self._generation:
+            return {"status": "STOPPED"}
         previous = self._audit
         self._audit = new_audit
         self._fingerprint = fingerprint
@@ -158,6 +179,7 @@ class PublicGitHubChangeWatch:
         self._checked_at = float("-inf")
         self._backoff = self.interval
         self._audit: dict | None = None
+        self._generation = 0
 
     def start(self, *, now: float | None = None) -> dict:
         """Explicit consent begins one pinned public snapshot analysis."""
@@ -170,6 +192,7 @@ class PublicGitHubChangeWatch:
         self._head = head
         self._checked_at = time.monotonic() if now is None else float(now)
         self._backoff = self.interval
+        self._generation += 1
         self.active = True
         return {"status": "STARTED", "repository": self.reader.owner + "/" + self.reader.repo,
                 "pinned_commit_sha": head, "source_sha": "UNVERIFIED",
@@ -177,11 +200,13 @@ class PublicGitHubChangeWatch:
 
     def stop(self) -> dict:
         self.active = False
+        self._generation += 1
         return {"status": "STOPPED"}
 
     def tick(self, *, now: float | None = None) -> dict:
         if not self.active:
             return {"status": "STOPPED"}
+        generation = self._generation
         moment = time.monotonic() if now is None else float(now)
         if moment - self._checked_at < self._backoff:
             return {"status": "WAIT"}
@@ -205,7 +230,10 @@ class PublicGitHubChangeWatch:
                 self._backoff = min(max(self._backoff * 2, self.interval), 14_400.0)
                 return {"status": "BACKOFF", "retry_seconds": self._backoff}
             self.active = False
+            self._generation += 1
             return {"status": "PAUSED", "reason": "REMOTE_REF_OR_SCOPE_UNSAFE"}
+        if not self.active or generation != self._generation:
+            return {"status": "STOPPED"}
         old_audit = self._audit
         self._audit = audit
         self._head = head

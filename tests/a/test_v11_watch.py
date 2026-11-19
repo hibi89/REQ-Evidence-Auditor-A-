@@ -80,6 +80,87 @@ class ChangeWatchSynthetic(unittest.TestCase):
             self.assertEqual(calls, ["main", b])
             self.assertEqual(watcher.stop()["status"], "STOPPED")
 
+    def test_initial_source_mutation_during_audit_fails_closed(self):
+        from reqea.core import watch as module
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)/"root"
+            req=_project(root)
+            watcher=LocalChangeWatch(str(root),str(req))
+            original=module.build_audit
+            def raced(*args,**kwargs):
+                result=original(*args,**kwargs)
+                (root/"src"/"app.py").write_text("def f(): return 99\n",encoding="utf-8")
+                return result
+            with patch.object(module,"build_audit",side_effect=raced):
+                with self.assertRaisesRegex(ValueError,"source changed during initial audit"):
+                    watcher.start(now=0)
+            self.assertFalse(watcher.active)
+            self.assertIsNone(watcher._audit)
+
+    def test_changed_source_mid_rescan_pauses_without_replacing_audit(self):
+        from reqea.core import watch as module
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)/"root"
+            req=_project(root)
+            watcher=LocalChangeWatch(str(root),str(req))
+            watcher.start(now=0)
+            baseline=watcher._audit
+            file=root/"src"/"app.py"
+            file.write_text("def f(): return 2\n",encoding="utf-8")
+            self.assertEqual(watcher.tick(now=30)["status"],"DEBOUNCING")
+            original=module.build_audit
+            def raced(*args,**kwargs):
+                result=original(*args,**kwargs)
+                file.write_text("def f(): return 3\n",encoding="utf-8")
+                return result
+            with patch.object(module,"build_audit",side_effect=raced):
+                state=watcher.tick(now=60)
+            self.assertEqual(state["status"],"PAUSED")
+            self.assertFalse(watcher.active)
+            self.assertIs(watcher._audit,baseline)
+
+    def test_explicit_stop_during_local_rescan_cancels_state_promotion(self):
+        from reqea.core import watch as module
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)/"root"
+            req=_project(root)
+            watcher=LocalChangeWatch(str(root),str(req))
+            watcher.start(now=0)
+            original_audit=watcher._audit
+            (root/"src"/"app.py").write_text("def f(): return 2\n",encoding="utf-8")
+            self.assertEqual(watcher.tick(now=30)["status"],"DEBOUNCING")
+            original=module.build_audit
+            def stop_during_audit(*args,**kwargs):
+                result=original(*args,**kwargs)
+                watcher.stop()
+                return result
+            with patch.object(module,"build_audit",side_effect=stop_during_audit):
+                state=watcher.tick(now=60)
+            self.assertEqual(state["status"],"STOPPED")
+            self.assertFalse(watcher.active)
+            self.assertIs(watcher._audit,original_audit)
+
+    def test_explicit_stop_during_remote_snapshot_cancels_state_promotion(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)/"remote"
+            _project(root)
+            old,new="a"*40,"b"*40
+            watcher=PublicGitHubChangeWatch("https://github.com/o/r","main","requirements.md")
+            @contextmanager
+            def synthetic(url,ref):
+                if ref==new:
+                    watcher.stop()
+                yield {"root":str(root),"commit_sha":new if ref==new else old,
+                       "owner":"o","repository":"r","source_sha":"UNVERIFIED"}
+            with patch("reqea.core.watch.public_github_snapshot",side_effect=synthetic):
+                watcher.start(now=0)
+                original_audit=watcher._audit
+                with patch.object(watcher.reader,"head_commit_sha",return_value=new):
+                    state=watcher.tick(now=900)
+            self.assertEqual(state["status"],"STOPPED")
+            self.assertEqual(watcher._head,old)
+            self.assertIs(watcher._audit,original_audit)
+
     def test_remote_rate_limit_backs_off_then_stop(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d) / "public"
