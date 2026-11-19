@@ -236,7 +236,9 @@ with tempfile.TemporaryDirectory() as d:
                 if before_request is not None:
                     before_request()
                 assert url == "https://github.com/example/example"
-                assert ref == "main"
+                # The explicit ambiguous selection pins the already discovered
+                # commit instead of re-reading the mutable "main" branch.
+                assert ref in ("main", "a" * 40)
                 yield {"root": str(small), "owner": "example",
                        "repository": "example", "commit_sha": "a"*40,
                        "source_sha": "UNVERIFIED", "tree_sha": "b"*40}
