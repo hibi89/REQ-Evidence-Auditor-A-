@@ -92,7 +92,8 @@ class LocalChangeWatch:
         self._pending = None
         self._checked_at = time.monotonic() if now is None else float(now)
         self.active = True
-        return {"status": "STARTED", "audit": self._audit, "verification_status": "NOT_RUN"}
+        return {"status": "STARTED", "audit": self._audit,
+                "fingerprint": self._fingerprint, "verification_status": "NOT_RUN"}
 
     def stop(self) -> dict:
         self.active = False
@@ -132,6 +133,7 @@ class LocalChangeWatch:
         self._fingerprint = fingerprint
         self._pending = None
         return {"status": "CHANGED", "previous": previous, "current": new_audit,
+                "fingerprint": fingerprint,
                 "source_sha": new_audit.get("source_sha", "UNVERIFIED"),
                 "verification_status": "NOT_RUN"}
 

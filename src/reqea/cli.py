@@ -10,6 +10,7 @@ from .core.discovery import discover_local_requirements
 from .core.selector import select_requirements
 from contextlib import nullcontext
 from .core.snapshot import public_github_snapshot
+from .core.history import compare_audits, save_delta
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -38,8 +39,30 @@ def main(argv: list[str] | None = None) -> int:
     source_audit.add_argument("--policy-sha", default="UNVERIFIED")
     source_audit.add_argument("--overwrite", action="store_true")
 
+    compare = commands.add_parser("compare", help="Compare two locally supplied reqea.v1 audit JSON files")
+    compare.add_argument("--before", required=True, help="Explicit prior audit.json")
+    compare.add_argument("--after", required=True, help="Explicit current audit.json")
+    compare.add_argument("--out", required=True, help="Approved local output folder")
+    compare.add_argument("--source-root", help="Optional root to enforce output outside scanned source")
+
     args = parser.parse_args(argv)
     try:
+        if args.command == "compare":
+            from pathlib import Path
+            from .core.output import _check_no_symlinks
+            def read_report(path: str) -> dict:
+                selected = Path(path).absolute()
+                _check_no_symlinks(selected)
+                if not selected.is_file() or selected.stat().st_size > 2_000_000:
+                    raise ValueError("audit JSON missing or oversized")
+                return json.loads(selected.read_text(encoding="utf-8"))
+            delta = compare_audits(read_report(args.before), read_report(args.after))
+            stored = save_delta(delta, out_dir=args.out, source_root=args.source_root)
+            print(json.dumps({"status": "CANDIDATE_DIFF_ONLY",
+                              "changed_count": delta["changed_count"],
+                              "verification_status": "NOT_RUN", **stored},
+                             ensure_ascii=False))
+            return 0
         if args.command == "audit-source":
             if args.repo and args.ref is not None:
                 raise ValueError("--ref is only valid for --github-url")
