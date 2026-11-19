@@ -265,6 +265,150 @@ class ChangeWatchSynthetic(unittest.TestCase):
             self.assertFalse(watcher.active)
             self.assertEqual(watcher.tick(now=100000)["status"], "STOPPED")
 
+    def test_local_stop_during_unchanged_fingerprint_is_final(self):
+        from reqea.core import watch as module
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "root"
+            req = _project(root)
+            watcher = LocalChangeWatch(str(root), str(req))
+            watcher.start(now=0)
+            old_audit = watcher._audit
+            original = module._local_fingerprint
+
+            def stop_after_read(*args, **kwargs):
+                value = original(*args, **kwargs)
+                watcher.stop()
+                return value
+
+            with patch.object(module, "_local_fingerprint", side_effect=stop_after_read):
+                result = watcher.tick(now=30)
+            self.assertEqual(result["status"], "STOPPED")
+            self.assertFalse(watcher.active)
+            self.assertIs(watcher._audit, old_audit)
+
+    def test_local_stop_during_debounce_does_not_recreate_pending(self):
+        from reqea.core import watch as module
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "root"
+            req = _project(root)
+            watcher = LocalChangeWatch(str(root), str(req))
+            watcher.start(now=0)
+            (root / "src" / "app.py").write_text("def f(): return 2\\n", encoding="utf-8")
+            original = module._local_fingerprint
+
+            def stop_after_read(*args, **kwargs):
+                value = original(*args, **kwargs)
+                watcher.stop()
+                return value
+
+            with patch.object(module, "_local_fingerprint", side_effect=stop_after_read):
+                result = watcher.tick(now=30)
+            self.assertEqual(result["status"], "STOPPED")
+            self.assertFalse(watcher.active)
+            self.assertIsNone(watcher._pending)
+
+    def test_remote_stop_during_unchanged_ref_is_final(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "public"
+            _project(root)
+            head = "a" * 40
+
+            @contextmanager
+            def fake_snapshot(url, ref):
+                yield {"root": str(root), "owner": "o", "repository": "r",
+                       "commit_sha": head, "source_sha": "UNVERIFIED"}
+
+            watcher = PublicGitHubChangeWatch("https://github.com/o/r",
+                                               "main", "requirements.md")
+            with patch("reqea.core.watch.public_github_snapshot",
+                       side_effect=fake_snapshot):
+                watcher.start(now=0)
+            previous = watcher._audit
+
+            def stop_during_ref():
+                watcher.stop()
+                return head
+
+            with patch.object(watcher.reader, "head_commit_sha",
+                              side_effect=stop_during_ref):
+                result = watcher.tick(now=900)
+            self.assertEqual(result["status"], "STOPPED")
+            self.assertFalse(watcher.active)
+            self.assertIs(watcher._audit, previous)
+
+    def test_overlapping_local_tick_is_single_flight(self):
+        from reqea.core import watch as module
+        from threading import Event, Thread
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "root"
+            req = _project(root)
+            watcher = LocalChangeWatch(str(root), str(req))
+            watcher.start(now=0)
+            entered, release = Event(), Event()
+            results = []
+            original = module._local_fingerprint
+
+            def delayed(root_arg):
+                entered.set()
+                if not release.wait(timeout=10):
+                    raise AssertionError("timed out waiting for concurrent probe")
+                return original(root_arg)
+
+            def poll():
+                results.append(watcher.tick(now=30))
+
+            with patch.object(module, "_local_fingerprint", side_effect=delayed):
+                thread = Thread(target=poll)
+                thread.start()
+                try:
+                    self.assertTrue(entered.wait(timeout=10))
+                    self.assertEqual(watcher.tick(now=30)["status"], "WAIT")
+                finally:
+                    release.set()
+                    thread.join(timeout=10)
+                self.assertFalse(thread.is_alive())
+            self.assertEqual([x["status"] for x in results], ["UNCHANGED"])
+            self.assertTrue(watcher.active)
+
+    def test_overlapping_remote_tick_is_single_flight(self):
+        from threading import Event, Thread
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "remote"
+            _project(root)
+            head = "a" * 40
+            entered, release = Event(), Event()
+
+            @contextmanager
+            def fake_snapshot(url, ref):
+                yield {"root": str(root), "owner": "o", "repository": "r",
+                       "commit_sha": head, "source_sha": "UNVERIFIED"}
+
+            watcher = PublicGitHubChangeWatch("https://github.com/o/r",
+                                               "main", "requirements.md")
+            with patch("reqea.core.watch.public_github_snapshot",
+                       side_effect=fake_snapshot):
+                watcher.start(now=0)
+
+            def delayed():
+                entered.set()
+                if not release.wait(timeout=10):
+                    raise AssertionError("timed out waiting for concurrent ref probe")
+                return head
+
+            results = []
+            with patch.object(watcher.reader, "head_commit_sha", side_effect=delayed):
+                thread = Thread(target=lambda: results.append(watcher.tick(now=900)))
+                thread.start()
+                try:
+                    self.assertTrue(entered.wait(timeout=10))
+                    self.assertEqual(watcher.tick(now=900)["status"], "WAIT")
+                finally:
+                    release.set()
+                    thread.join(timeout=10)
+                self.assertFalse(thread.is_alive())
+            self.assertEqual([x["status"] for x in results], ["UNCHANGED"])
+            self.assertTrue(watcher.active)
+
     def test_remote_rate_limit_backs_off_then_stop(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d) / "public"

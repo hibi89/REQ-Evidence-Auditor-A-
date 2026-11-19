@@ -75,6 +75,7 @@ class LocalChangeWatch:
         self._audit: dict | None = None
         self._generation = 0
         self._state_lock = Lock()
+        self._polling = False
 
     def start(self, *, now: float | None = None) -> dict:
         """Explicit opt-in only; do not persist any source or automatically save."""
@@ -123,35 +124,50 @@ class LocalChangeWatch:
         return {"status": "STOPPED"}
 
     def tick(self, *, now: float | None = None) -> dict:
-        """One bounded owner-driven poll; returns new audit only after stable change."""
-        if not self.active:
-            return {"status": "STOPPED"}
-        generation = self._generation
+        """One bounded poll. STOP and concurrent ticks cannot publish stale state."""
         moment = time.monotonic() if now is None else float(now)
-        if moment - self._checked_at < self.interval:
-            return {"status": "WAIT"}
-        self._checked_at = moment
+        with self._state_lock:
+            if not self.active:
+                return {"status": "STOPPED"}
+            if self._polling or moment - self._checked_at < self.interval:
+                return {"status": "WAIT"}
+            self._checked_at = moment
+            self._polling = True
+            generation = self._generation
+            previous_fingerprint = self._fingerprint
+            pending = self._pending
+            requirements = self.requirements
+            baseline_doc = self._baseline_doc
         try:
             fingerprint = _local_fingerprint(self.root)
-            if fingerprint == self._fingerprint:
-                self._pending = None
+            if fingerprint == previous_fingerprint:
+                with self._state_lock:
+                    if not self.active or generation != self._generation:
+                        return {"status": "STOPPED"}
+                    self._pending = None
                 return {"status": "UNCHANGED"}
-            source = inspect_local_source(self.root, self.requirements)
+            source = inspect_local_source(self.root, requirements)
             latest_digest = hashlib.sha256(read_checked_requirements(source)).hexdigest()
-            if latest_digest != self._baseline_doc:
+            if latest_digest != baseline_doc:
                 raise ValueError("canonical requirements changed; human confirmation required")
-            if self._pending is None or self._pending[0] != fingerprint:
-                self._pending = (fingerprint, moment)
+            if pending is None or pending[0] != fingerprint:
+                with self._state_lock:
+                    if not self.active or generation != self._generation:
+                        return {"status": "STOPPED"}
+                    self._pending = (fingerprint, moment)
                 return {"status": "DEBOUNCING"}
-            if moment - self._pending[1] < self.debounce:
+            if moment - pending[1] < self.debounce:
+                with self._state_lock:
+                    if not self.active or generation != self._generation:
+                        return {"status": "STOPPED"}
                 return {"status": "DEBOUNCING"}
-            new_audit = build_audit(self.root, self.requirements)
+            new_audit = build_audit(self.root, requirements)
             if _FATAL.intersection(new_audit.get("warnings", [])):
                 raise ValueError("new local audit contract incomplete")
             if _local_fingerprint(self.root) != fingerprint:
                 raise ValueError("local source changed during audit")
-            source = inspect_local_source(self.root, self.requirements)
-            if hashlib.sha256(read_checked_requirements(source)).hexdigest() != self._baseline_doc:
+            source = inspect_local_source(self.root, requirements)
+            if hashlib.sha256(read_checked_requirements(source)).hexdigest() != baseline_doc:
                 raise ValueError("canonical requirements changed during audit")
         except (ValueError, OSError, UnicodeError):
             with self._state_lock:
@@ -160,6 +176,9 @@ class LocalChangeWatch:
                 self.active = False
                 self._generation += 1
             return {"status": "PAUSED", "reason": "LOCAL_INPUT_CHANGED_OR_UNSAFE"}
+        finally:
+            with self._state_lock:
+                self._polling = False
         with self._state_lock:
             if not self.active or generation != self._generation:
                 return {"status": "STOPPED"}
@@ -171,7 +190,6 @@ class LocalChangeWatch:
                     "fingerprint": fingerprint,
                     "source_sha": new_audit.get("source_sha", "UNVERIFIED"),
                     "verification_status": "NOT_RUN"}
-
 
 class PublicGitHubChangeWatch:
     """Opt-in 15-minute+ public-ref polling with fail-closed backoff."""
@@ -195,6 +213,7 @@ class PublicGitHubChangeWatch:
         self._audit: dict | None = None
         self._generation = 0
         self._state_lock = Lock()
+        self._polling = False
 
     def start(self, *, now: float | None = None) -> dict:
         """Explicit consent begins one pinned public snapshot analysis."""
@@ -225,31 +244,35 @@ class PublicGitHubChangeWatch:
         return {"status": "STOPPED"}
 
     def tick(self, *, now: float | None = None) -> dict:
-        if not self.active:
-            return {"status": "STOPPED"}
-        generation = self._generation
+        """No concurrent remote polling, stale state, or post-STOP promotion."""
         moment = time.monotonic() if now is None else float(now)
-        if moment - self._checked_at < self._backoff:
-            return {"status": "WAIT"}
-        self._checked_at = moment
+        with self._state_lock:
+            if not self.active:
+                return {"status": "STOPPED"}
+            if self._polling or moment - self._checked_at < self._backoff:
+                return {"status": "WAIT"}
+            self._checked_at = moment
+            self._polling = True
+            generation = self._generation
+            previous_head = self._head
+            selected = self._selected
+            document_digest = self._document_digest
         try:
             head = self.reader.head_commit_sha()
-            if head == self._head:
+            if head == previous_head:
                 with self._state_lock:
                     if not self.active or generation != self._generation:
                         return {"status": "STOPPED"}
                     self._backoff = self.interval
                 return {"status": "UNCHANGED"}
-            # Fix the exact observed SHA to prevent a ref moving during transfer.
+            # Pin the observed commit: moving the branch during transfer is safe.
             with public_github_snapshot(self.url, head) as snapshot:
                 if snapshot["commit_sha"] != head:
                     raise ValueError("ref changed during snapshot")
-                selection, audit = _candidate_audit(snapshot["root"], self._selected)
-                if selection["sha256"] != self._document_digest:
+                selection, audit = _candidate_audit(snapshot["root"], selected)
+                if selection["sha256"] != document_digest:
                     raise ValueError("canonical document changed; explicit review required")
         except (ValueError, OSError, UnicodeError) as exc:
-            # Only rate-limit/HTTP-access faults are recoverable through bounded
-            # backoff; unexpected source changes or snapshot failures PAUSE.
             with self._state_lock:
                 if not self.active or generation != self._generation:
                     return {"status": "STOPPED"}
@@ -259,6 +282,9 @@ class PublicGitHubChangeWatch:
                 self.active = False
                 self._generation += 1
             return {"status": "PAUSED", "reason": "REMOTE_REF_OR_SCOPE_UNSAFE"}
+        finally:
+            with self._state_lock:
+                self._polling = False
         with self._state_lock:
             if not self.active or generation != self._generation:
                 return {"status": "STOPPED"}
