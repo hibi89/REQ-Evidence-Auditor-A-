@@ -53,3 +53,11 @@ SWU별 `status=READY|IN_PROGRESS|IMPLEMENTED_UNVERIFIED|ISOLATED_REDESIGN_PENDIN
 | A-14 | REQ-039, REQ-040 | A-09,A-11,A-12,A-13 | src/reqea/core/history.py; src/reqea/core/output.py; src/reqea/gui/app.py; src/reqea/cli.py; tests/a/** | SHA/REQ 상태 diff·로컬 히스토리·UI 표시와 출력·원본 불변/보안·오류/복구 | BLOCKED_DEPENDENCY |
 
 임계 DAG: A-08 → A-09 → A-11 → A-12 → A-14, 병렬 독립 A-10 → A-11 → A-13 → A-14. 사용자 승인 범위는 **공개 GitHub 읽기 전용 설계**뿐. 비공개 인증·토큰/권한 변경·원본 외부 전송은 BLOCKED_APPROVAL. V1.1 P2 V11-P2-01..05 전부 NOT_RUN. 기존 17 SWU의 REQ/수용·실패·SHA 보존.
+
+## V1.1 SWU implementation evidence update — 2026-11-19 KST
+
+- Exact code SHA `f311b36af9f3901fd4b7c938e1572da4a1a5f176` / [CI 44480697806](https://github.com/hibi89/REQ-Evidence-Auditor-A-/actions/runs/44480697806) 6/6 SUCCESS.
+- **IMPLEMENTED_UNVERIFIED:** A-08 (bounded local discovery + GUI/CLI), A-09 (explicit SHA-bound canonical selection), A-10 (public GitHub pinned read-only snapshot/CLI discovery), A-11 (selected snapshot to A/B/C audit-source CLI), A-12 (explicit foreground local stable fingerprint/debounce watch API), A-13 (explicit foreground public GitHub SHA polling/backoff watch API). These are P1 code candidates, not an independent or actual public network run.
+- **READY:** A-14 (REQ-039/040 history/diff, registered-project/GitHub GUI selection, Start/Stop watch UI, persisted local-only delta reports). REQ-031 partial until A-14 UI; V11-P2-01..05 NOT_RUN.
+- Baseline 17 SWU candidates + 6 newly implemented candidates = 23/24 code-candidate count, official weighted implementation UNASSESSED. No fake P2 verified completion. Respect allowed_paths and retained A/B/C contract. No unapproved main/Production/credential/customer source changes.
+
