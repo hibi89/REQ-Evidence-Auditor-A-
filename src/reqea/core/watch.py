@@ -13,7 +13,7 @@ import time
 from reqea_codegraph.files import read_file
 from reqea_codegraph.walk import scan_tree
 from .discovery import discover_local_requirements
-from .github_source import PublicGitHubReader
+from .github_source import GitHubRateLimitError, PublicGitHubReader
 from .orchestrator import build_audit
 from .selector import select_requirements
 from .snapshot import public_github_snapshot
@@ -286,8 +286,10 @@ class PublicGitHubChangeWatch:
             with self._state_lock:
                 if not self.active or generation != self._generation:
                     return {"status": "STOPPED"}
-                if "rate limited" in str(exc):
-                    self._backoff = min(max(self._backoff * 2, self.interval), 14_400.0)
+                if isinstance(exc, GitHubRateLimitError):
+                    # Respect explicit GitHub Retry-After or reset deadlines.
+                    hint = exc.retry_seconds if exc.retry_seconds is not None else 0.0
+                    self._backoff = min(max(self._backoff * 2, self.interval, hint), 86_400.0)
                     return {"status": "BACKOFF", "retry_seconds": self._backoff}
                 self.active = False
                 self._generation += 1

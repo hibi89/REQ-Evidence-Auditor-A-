@@ -4,7 +4,9 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+from datetime import datetime, timedelta, timezone
 from email.message import Message
+from email.utils import format_datetime
 from urllib.error import HTTPError
 from pathlib import Path
 from unittest.mock import patch
@@ -60,6 +62,49 @@ class PublicGitHubSnapshot(unittest.TestCase):
                                   return_value=ForbiddenOpener()):
                     with self.assertRaisesRegex(ValueError, expected):
                         github_source._json_get("/repos/o/r")
+
+    def test_rate_limit_retry_after_and_reset_deadlines_without_network(self):
+        # A server-required 2h delay must not be reduced to normal 30m backoff.
+        numeric = Message()
+        numeric["Retry-After"] = "7200"
+        self.assertEqual(github_source._retry_delay(numeric), 7200)
+        date_hint = Message()
+        date_hint["Retry-After"] = format_datetime(
+            datetime.now(timezone.utc) + timedelta(hours=1), usegmt=True
+        )
+        self.assertTrue(3580 <= github_source._retry_delay(date_hint) <= 3601)
+        reset = Message()
+        reset["X-RateLimit-Remaining"] = "0"
+        reset["X-RateLimit-Reset"] = "1800003600"
+        with patch.object(github_source.time, "time", return_value=1800000000):
+            self.assertEqual(github_source._retry_delay(reset), 3600)
+
+    def test_rate_limit_malformed_or_overlong_hint_fails_closed(self):
+        for hint in ("garbage-date", "9999999999", "123456789012345"):
+            with self.subTest(hint=hint):
+                headers = Message()
+                headers["Retry-After"] = hint
+                with self.assertRaises(ValueError):
+                    github_source._retry_delay(headers)
+        headers = Message()
+        headers["X-RateLimit-Remaining"] = "0"
+        headers["X-RateLimit-Reset"] = "not-a-timestamp"
+        with self.assertRaises(ValueError):
+            github_source._retry_delay(headers)
+
+    def test_http_429_carries_safe_retry_metadata(self):
+        headers = Message()
+        headers["Retry-After"] = "7200"
+
+        class LimitedOpener:
+            def open(self, request, timeout):
+                raise HTTPError(request.full_url, 429, "synthetic", headers, None)
+
+        with patch.object(github_source, "build_opener",
+                          return_value=LimitedOpener()):
+            with self.assertRaises(github_source.GitHubRateLimitError) as caught:
+                github_source._json_get("/repos/o/r")
+        self.assertEqual(caught.exception.retry_seconds, 7200)
 
     def test_pinned_public_snapshot_verifies_blobs_and_cleans_up(self):
         source = b"# REQ-001 sampled\\nAcceptance criteria:\\n- file exists\\n".replace(b"\\n", b"\n")

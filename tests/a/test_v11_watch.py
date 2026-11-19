@@ -409,6 +409,33 @@ class ChangeWatchSynthetic(unittest.TestCase):
             self.assertEqual([x["status"] for x in results], ["UNCHANGED"])
             self.assertTrue(watcher.active)
 
+    def test_remote_retry_hint_prevents_premature_poll(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "public"
+            _project(root)
+
+            @contextmanager
+            def fake_snapshot(url, ref):
+                yield {"root": str(root), "owner": "o", "repository": "r",
+                       "commit_sha": "a" * 40, "source_sha": "UNVERIFIED"}
+
+            watcher = PublicGitHubChangeWatch("https://github.com/o/r", "main",
+                                               "requirements.md")
+            with patch("reqea.core.watch.public_github_snapshot",
+                       side_effect=fake_snapshot):
+                watcher.start(now=0)
+            from reqea.core.github_source import GitHubRateLimitError
+            with patch.object(watcher.reader, "head_commit_sha",
+                              side_effect=GitHubRateLimitError(7200)):
+                result = watcher.tick(now=900)
+            self.assertEqual(result["status"], "BACKOFF")
+            self.assertGreaterEqual(result["retry_seconds"], 7200)
+            with patch.object(watcher.reader, "head_commit_sha",
+                              return_value="a" * 40) as query:
+                self.assertEqual(watcher.tick(now=8099)["status"], "WAIT")
+                query.assert_not_called()
+                self.assertEqual(watcher.tick(now=8100)["status"], "UNCHANGED")
+
     def test_remote_rate_limit_backs_off_then_stop(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d) / "public"
@@ -424,7 +451,7 @@ class ChangeWatchSynthetic(unittest.TestCase):
             with patch("reqea.core.watch.public_github_snapshot", side_effect=fake_snapshot):
                 watcher.start(now=0)
             with patch.object(watcher.reader, "head_commit_sha",
-                              side_effect=ValueError("GitHub rate limited or access denied")):
+                              side_effect=__import__("reqea.core.github_source", fromlist=["GitHubRateLimitError"]).GitHubRateLimitError()):
                 result = watcher.tick(now=900)
             self.assertEqual(result["status"], "BACKOFF")
             self.assertGreaterEqual(result["retry_seconds"], 1800)

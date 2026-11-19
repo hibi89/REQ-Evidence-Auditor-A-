@@ -5,9 +5,12 @@ side effects outside a disposable, owned temporary directory.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 import json
 import re
 import ssl
+import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import (HTTPRedirectHandler, HTTPSHandler, ProxyHandler,
@@ -20,6 +23,49 @@ _SHA = re.compile(r"[0-9a-fA-F]{40}\Z")
 _REF = re.compile(r"[A-Za-z0-9_./\-]{1,160}\Z")
 _API_PREFIX = "https://api.github.com/repos/"
 _MAX_JSON = 2_000_000
+_MAX_RETRY_SECONDS = 86_400
+
+
+class GitHubRateLimitError(ValueError):
+    """Safe retry metadata, never server-provided error text or URLs."""
+
+    def __init__(self, retry_seconds: float | None = None) -> None:
+        super().__init__("GitHub rate limited")
+        self.retry_seconds = retry_seconds
+
+
+def _retry_delay(headers) -> float | None:
+    """Use trusted bounded retry hints; pause on malformed/oversized values."""
+    if headers is None:
+        return None
+    retry = headers.get("Retry-After")
+    if retry is not None:
+        if not isinstance(retry, str) or len(retry) > 100:
+            raise ValueError("invalid GitHub retry hint")
+        if re.fullmatch(r"[0-9]{1,10}", retry):
+            seconds = float(int(retry))
+        else:
+            try:
+                deadline = parsedate_to_datetime(retry)
+                if deadline.tzinfo is None:
+                    raise ValueError("missing timezone")
+                seconds = max(0.0, (deadline - datetime.now(timezone.utc)).total_seconds())
+            except (TypeError, ValueError, OverflowError, IndexError):
+                raise ValueError("invalid GitHub retry hint") from None
+        if not 0 <= seconds <= _MAX_RETRY_SECONDS:
+            raise ValueError("GitHub retry window exceeds safety limit")
+        return seconds
+    if headers.get("X-RateLimit-Remaining") == "0":
+        reset = headers.get("X-RateLimit-Reset")
+        if reset is None:
+            return None
+        if not isinstance(reset, str) or not re.fullmatch(r"[0-9]{1,11}", reset):
+            raise ValueError("invalid GitHub reset hint")
+        seconds = max(0.0, float(int(reset)) - time.time())
+        if seconds > _MAX_RETRY_SECONDS:
+            raise ValueError("GitHub reset window exceeds safety limit")
+        return seconds
+    return None
 
 
 def parse_public_github_url(url: str) -> tuple[str, str]:
@@ -77,7 +123,7 @@ def _json_get(path: str, *, cap: int = _MAX_JSON) -> dict:
             headers.get("X-RateLimit-Remaining") == "0"
             or headers.get("Retry-After") is not None))
         if limited:
-            raise ValueError("GitHub rate limited") from None
+            raise GitHubRateLimitError(_retry_delay(headers)) from None
         if exc.code == 403:
             raise ValueError("GitHub access denied") from None
         if exc.code in (401, 404):
