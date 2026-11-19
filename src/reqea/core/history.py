@@ -34,7 +34,7 @@ def _source_id(value: object) -> str:
 
 
 def _snapshot_token(value: object) -> str:
-    if value is None:
+    if value is None or value == "UNVERIFIED":
         return "UNVERIFIED"
     if isinstance(value, str) and (_HEX40.fullmatch(value.lower()) or _HEX64.fullmatch(value.lower())):
         return value.lower()
@@ -241,3 +241,48 @@ def load_projects(*, out_dir: str) -> list[dict]:
         parsed = json.loads(encoded.decode("utf-8"))
         records.append(_validated_profile(parsed))
     return records
+
+
+def load_deltas(*, out_dir: str) -> list[dict]:
+    """Read bounded, fingerprint-verified candidate history from chosen output."""
+    dest = _safe_output(out_dir)
+    folder = dest / "reqea-history"
+    _check_no_symlinks(folder)
+    if not folder.exists():
+        return []
+    if not folder.is_dir():
+        raise ValueError("history output is not a directory")
+    paths = list(folder.iterdir())
+    if len(paths) > 128:
+        raise ValueError("too many local history records")
+    records: list[dict] = []
+    for path in sorted(paths):
+        if not re.fullmatch(r"reqea-delta-[0-9a-f]{64}\.json", path.name):
+            raise ValueError("unexpected history entry; inspect transaction evidence")
+        info = path.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_size > 512_000:
+            raise ValueError("unsafe history entry")
+        raw = path.read_bytes()
+        if hashlib.sha256(raw).hexdigest() != path.stem.removeprefix("reqea-delta-"):
+            raise ValueError("local history record changed")
+        item = json.loads(raw.decode("utf-8"))
+        if not isinstance(item, dict) or item.get("schema_version") != "reqea.delta.v11":
+            raise ValueError("invalid local history schema")
+        records.append(item)
+    return records
+
+
+def unregister_project(profile: dict, *, out_dir: str) -> bool:
+    """Explicitly forget a bookmark record only; never delete audit or source."""
+    safe = _validated_profile(profile)
+    encoded = (json.dumps(safe, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+    digest = hashlib.sha256(encoded).hexdigest()
+    dest = _safe_output(out_dir, source_root=safe["source"] if safe["kind"] == "local" else None)
+    path = dest / "reqea-projects" / ("reqea-profile-" + digest + ".json")
+    _check_no_symlinks(path)
+    if not path.exists():
+        return False
+    if not path.is_file() or path.read_bytes() != encoded:
+        raise ValueError("registered project record has changed; refuse deletion")
+    path.unlink()
+    return True
