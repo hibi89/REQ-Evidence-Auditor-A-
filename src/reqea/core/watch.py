@@ -269,7 +269,13 @@ class PublicGitHubChangeWatch:
             if self._cancel_pending_start:
                 return {"status": "STOPPED"}
             generation = self._generation
-        with public_github_snapshot(self.url, self.ref) as snapshot:
+        def ensure_not_cancelled() -> None:
+            with self._state_lock:
+                if self._cancel_pending_start or generation != self._generation:
+                    raise ValueError("public GitHub watch cancelled")
+        with public_github_snapshot(self.url, self.ref,
+                                    before_request=ensure_not_cancelled) as snapshot:
+            ensure_not_cancelled()
             selection, audit = _candidate_audit(snapshot["root"], self.requirements)
             head = snapshot["commit_sha"]
         with self._state_lock:
@@ -324,7 +330,11 @@ class PublicGitHubChangeWatch:
             selected = self._selected
             document_digest = self._document_digest
         try:
-            head = self.reader.head_commit_sha()
+            def ensure_still_active() -> None:
+                with self._state_lock:
+                    if not self.active or generation != self._generation:
+                        raise ValueError("public GitHub watch stopped")
+            head = self.reader.head_commit_sha(before_request=ensure_still_active)
             if head == previous_head:
                 with self._state_lock:
                     if not self.active or generation != self._generation:
@@ -332,7 +342,9 @@ class PublicGitHubChangeWatch:
                     self._backoff = self.interval
                 return {"status": "UNCHANGED"}
             # Pin the observed commit: moving the branch during transfer is safe.
-            with public_github_snapshot(self.url, head) as snapshot:
+            with public_github_snapshot(self.url, head,
+                                        before_request=ensure_still_active) as snapshot:
+                ensure_still_active()
                 if snapshot["commit_sha"] != head:
                     raise ValueError("ref changed during snapshot")
                 selection, audit = _candidate_audit(snapshot["root"], selected)

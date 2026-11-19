@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Callable
 import re
 import tempfile
 
@@ -41,9 +42,10 @@ def _safe_file(path: object) -> bool:
 
 
 @contextmanager
-def public_github_snapshot(url: str, ref: str | None = None):
-    """Yield a validated ephemeral root; never persist or publish remote source."""
-    reader = PublicGitHubReader(url, ref)
+def public_github_snapshot(url: str, ref: str | None = None, *,
+                           before_request: Callable[[], None] | None = None):
+    """Yield validated ephemeral source; abort at every new GET when cancelled."""
+    reader = PublicGitHubReader(url, ref, before_request=before_request)
     commit_sha, tree_sha, entries = reader.pinned_tree()
     planned: list[tuple[str, str, int]] = []
     seen: set[str] = set()
@@ -81,12 +83,18 @@ def public_github_snapshot(url: str, ref: str | None = None):
         root.mkdir()
         for rel, sha, size in sorted(planned):
             payload = reader.read_blob(sha, max_bytes=_MAX_FILE_BYTES)
+            # STOP while one GET was in flight must discard its result, not
+            # write a new temporary source file after cancellation.
+            if before_request is not None:
+                before_request()
             if len(payload) != size:
                 raise ValueError("GitHub tree/blob byte sizes disagree")
             destination = root.joinpath(*rel.split("/"))
             destination.parent.mkdir(parents=True, exist_ok=True)
             with destination.open("xb") as handle:
                 handle.write(payload)
+        if before_request is not None:
+            before_request()
         yield {"root": str(root), "owner": reader.owner, "repository": reader.repo,
                "requested_ref": reader.requested_ref, "commit_sha": commit_sha,
                "tree_sha": tree_sha, "file_count": len(planned),

@@ -58,7 +58,7 @@ class ChangeWatchSynthetic(unittest.TestCase):
             calls: list[str | None] = []
 
             @contextmanager
-            def fake_snapshot(url, ref):
+            def fake_snapshot(url, ref, *, before_request=None):
                 self.assertEqual(url, "https://github.com/o/r")
                 calls.append(ref)
                 yield {"root": str(root), "owner": "o", "repository": "r",
@@ -110,7 +110,7 @@ class ChangeWatchSynthetic(unittest.TestCase):
             )
 
             @contextmanager
-            def interrupted_snapshot(url, ref):
+            def interrupted_snapshot(url, ref, *, before_request=None):
                 watcher.stop()  # STOP while a pinned HTTPS snapshot is loading.
                 yield {"root": str(root), "owner": "o", "repository": "r",
                        "commit_sha": "a" * 40, "source_sha": "UNVERIFIED"}
@@ -213,7 +213,7 @@ class ChangeWatchSynthetic(unittest.TestCase):
             head = "a" * 40
             calls: list[str] = []
             @contextmanager
-            def fake_snapshot(url, ref):
+            def fake_snapshot(url, ref, *, before_request=None):
                 self.assertEqual(url, "https://github.com/o/r")
                 yield {"root": str(root), "owner": "o", "repository": "r",
                        "commit_sha": head, "source_sha": "UNVERIFIED"}
@@ -248,7 +248,7 @@ class ChangeWatchSynthetic(unittest.TestCase):
             _project(root)
 
             @contextmanager
-            def fake_snapshot(url, ref):
+            def fake_snapshot(url, ref, *, before_request=None):
                 yield {"root": str(root), "owner": "o", "repository": "r",
                        "commit_sha": "a" * 40, "source_sha": "UNVERIFIED"}
 
@@ -314,7 +314,7 @@ class ChangeWatchSynthetic(unittest.TestCase):
             head = "a" * 40
 
             @contextmanager
-            def fake_snapshot(url, ref):
+            def fake_snapshot(url, ref, *, before_request=None):
                 yield {"root": str(root), "owner": "o", "repository": "r",
                        "commit_sha": head, "source_sha": "UNVERIFIED"}
 
@@ -325,7 +325,7 @@ class ChangeWatchSynthetic(unittest.TestCase):
                 watcher.start(now=0)
             previous = watcher._audit
 
-            def stop_during_ref():
+            def stop_during_ref(*, before_request=None):
                 watcher.stop()
                 return head
 
@@ -379,7 +379,7 @@ class ChangeWatchSynthetic(unittest.TestCase):
             entered, release = Event(), Event()
 
             @contextmanager
-            def fake_snapshot(url, ref):
+            def fake_snapshot(url, ref, *, before_request=None):
                 yield {"root": str(root), "owner": "o", "repository": "r",
                        "commit_sha": head, "source_sha": "UNVERIFIED"}
 
@@ -389,7 +389,7 @@ class ChangeWatchSynthetic(unittest.TestCase):
                        side_effect=fake_snapshot):
                 watcher.start(now=0)
 
-            def delayed():
+            def delayed(*, before_request=None):
                 entered.set()
                 if not release.wait(timeout=10):
                     raise AssertionError("timed out waiting for concurrent ref probe")
@@ -415,7 +415,7 @@ class ChangeWatchSynthetic(unittest.TestCase):
             _project(root)
 
             @contextmanager
-            def fake_snapshot(url, ref):
+            def fake_snapshot(url, ref, *, before_request=None):
                 yield {"root": str(root), "owner": "o", "repository": "r",
                        "commit_sha": "a" * 40, "source_sha": "UNVERIFIED"}
 
@@ -469,7 +469,7 @@ class ChangeWatchSynthetic(unittest.TestCase):
             self.assertTrue(local.active)
 
             @contextmanager
-            def fake_snapshot(url, ref):
+            def fake_snapshot(url, ref, *, before_request=None):
                 yield {"root": str(root), "owner": "o", "repository": "r",
                        "commit_sha": "a" * 40, "source_sha": "UNVERIFIED"}
 
@@ -519,7 +519,7 @@ class ChangeWatchSynthetic(unittest.TestCase):
                 "https://github.com/o/r", "main", "requirements.md")
 
             @contextmanager
-            def delayed(url, ref):
+            def delayed(url, ref, *, before_request=None):
                 watcher.cancel_pending_start()
                 yield {"root": str(root), "owner": "o", "repository": "r",
                        "commit_sha": "a" * 40, "source_sha": "UNVERIFIED"}
@@ -550,7 +550,7 @@ class ChangeWatchSynthetic(unittest.TestCase):
             root = Path(d) / "remote"
             _project(root)
             @contextmanager
-            def snapshot(url, ref):
+            def snapshot(url, ref, *, before_request=None):
                 yield {"root": str(root), "owner": "o", "repository": "r",
                        "commit_sha": "a" * 40, "source_sha": "UNVERIFIED"}
             watcher = PublicGitHubChangeWatch(
@@ -574,7 +574,7 @@ class ChangeWatchSynthetic(unittest.TestCase):
             root = Path(d) / "remote"
             _project(root)
             @contextmanager
-            def snapshot(url, ref):
+            def snapshot(url, ref, *, before_request=None):
                 yield {"root": str(root), "owner": "o", "repository": "r",
                        "commit_sha": "a" * 40, "source_sha": "UNVERIFIED"}
             watcher = PublicGitHubChangeWatch(
@@ -589,13 +589,110 @@ class ChangeWatchSynthetic(unittest.TestCase):
             self.assertEqual(watcher.seconds_until_due(now=8219), 1)
             self.assertEqual(watcher.seconds_until_due(now=8220), 0)
 
+    def test_remote_stop_during_second_head_get_prevents_followup_http(self):
+        watcher = PublicGitHubChangeWatch("https://github.com/o/r", "main",
+                                           "requirements.md")
+        with watcher._state_lock:
+            watcher.active = True
+            watcher._generation = 1
+            watcher._checked_at = 0
+            watcher._head = "a" * 40
+        calls = []
+        def api(path, *, cap=2_000_000):
+            calls.append(path)
+            if len(calls) == 1:
+                watcher.stop()
+            return {"private": False, "full_name": "o/r",
+                    "default_branch": "main"}
+        with patch("reqea.core.github_source._json_get", side_effect=api):
+            self.assertEqual(watcher.tick(now=900)["status"], "STOPPED")
+        self.assertEqual(calls, ["/repos/o/r"])
+        self.assertFalse(watcher.active)
+
+    def test_stop_during_initial_multiblob_snapshot_blocks_next_get(self):
+        import tempfile as tempmod
+        watcher = PublicGitHubChangeWatch("https://github.com/o/r", "main",
+                                           "requirements.md")
+        reads, roots = [], []
+        original_temp = tempmod.TemporaryDirectory
+        def track_temp(*args, **kwargs):
+            item = original_temp(*args, **kwargs)
+            roots.append(Path(item.name))
+            return item
+        class SyntheticReader:
+            def __init__(self, url, ref, *, before_request=None):
+                self.before_request = before_request
+                self.owner, self.repo = "o", "r"
+                self.requested_ref = ref
+            def pinned_tree(self):
+                self.before_request()
+                return "a" * 40, "b" * 40, [
+                    {"path": f"src/app_{i}.py", "type": "blob",
+                     "mode": "100644", "sha": str(i) * 40, "size": 1}
+                    for i in (1, 2)
+                ]
+            def read_blob(self, sha, *, max_bytes):
+                self.before_request()
+                reads.append(sha)
+                if len(reads) == 1:
+                    watcher.cancel_pending_start()
+                return b"x"
+        with patch("reqea.core.snapshot.PublicGitHubReader", SyntheticReader), \
+             patch("reqea.core.snapshot.tempfile.TemporaryDirectory", side_effect=track_temp):
+            with self.assertRaisesRegex(ValueError, "cancelled"):
+                watcher.start(now=0)
+        self.assertEqual(reads, ["1" * 40])
+        self.assertEqual(len(roots), 1)
+        self.assertFalse(roots[0].exists())
+        self.assertFalse(watcher.active)
+        self.assertIsNone(watcher._audit)
+
+    def test_stop_during_changed_multiblob_snapshot_discards_result(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "initial"
+            _project(root)
+            watcher = PublicGitHubChangeWatch("https://github.com/o/r", "main",
+                                               "requirements.md")
+            @contextmanager
+            def initial(url, ref, *, before_request=None):
+                yield {"root": str(root), "owner": "o", "repository": "r",
+                       "commit_sha": "a" * 40, "source_sha": "UNVERIFIED"}
+            with patch("reqea.core.watch.public_github_snapshot", side_effect=initial):
+                watcher.start(now=0)
+            old_audit, old_head = watcher._audit, watcher._head
+            reads = []
+            class SyntheticReader:
+                def __init__(self, url, ref, *, before_request=None):
+                    self.before_request = before_request
+                    self.owner, self.repo = "o", "r"
+                    self.requested_ref = ref
+                def pinned_tree(self):
+                    self.before_request()
+                    return "b" * 40, "c" * 40, [
+                        {"path": f"src/app_{i}.py", "type": "blob",
+                         "mode": "100644", "sha": str(i) * 40, "size": 1}
+                        for i in (1, 2)
+                    ]
+                def read_blob(self, sha, *, max_bytes):
+                    self.before_request()
+                    reads.append(sha)
+                    watcher.stop()
+                    return b"x"
+            with patch.object(watcher.reader, "head_commit_sha",
+                              return_value="b" * 40), \
+                 patch("reqea.core.snapshot.PublicGitHubReader", SyntheticReader):
+                self.assertEqual(watcher.tick(now=900)["status"], "STOPPED")
+            self.assertEqual(reads, ["1" * 40])
+            self.assertEqual(watcher._head, old_head)
+            self.assertIs(watcher._audit, old_audit)
+
     def test_remote_rate_limit_backs_off_then_stop(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d) / "public"
             _project(root)
 
             @contextmanager
-            def fake_snapshot(url, ref):
+            def fake_snapshot(url, ref, *, before_request=None):
                 yield {"root": str(root), "owner": "o", "repository": "r",
                        "commit_sha": "a" * 40, "source_sha": "UNVERIFIED"}
 

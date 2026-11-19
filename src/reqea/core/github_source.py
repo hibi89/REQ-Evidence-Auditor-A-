@@ -11,6 +11,7 @@ import json
 import re
 import ssl
 import time
+from typing import Callable
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import (HTTPRedirectHandler, HTTPSHandler, ProxyHandler,
@@ -143,12 +144,20 @@ def _json_get(path: str, *, cap: int = _MAX_JSON) -> dict:
 class PublicGitHubReader:
     """Bounded read-only repository metadata/commit/tree/blob API reader."""
 
-    def __init__(self, url: str, ref: str | None = None) -> None:
+    def __init__(self, url: str, ref: str | None = None, *,
+                 before_request: Callable[[], None] | None = None) -> None:
         self.owner, self.repo = parse_public_github_url(url)
         self.requested_ref = validate_ref(ref)
         self._calls = 0
+        self._before_request = before_request
 
-    def _read(self, suffix: str, cap: int = _MAX_JSON) -> dict:
+    def _read(self, suffix: str, cap: int = _MAX_JSON, *,
+              before_request: Callable[[], None] | None = None) -> dict:
+        # An already in-flight GET can finish, but STOP must prevent the next.
+        if self._before_request is not None:
+            self._before_request()
+        if before_request is not None:
+            before_request()
         self._calls += 1
         # 200 allowed snapshot source blobs plus metadata/commit/tree GETs.
         # Keep this per-operation cap explicit; never unbounded.
@@ -172,14 +181,15 @@ class PublicGitHubReader:
             raise ValueError("invalid GitHub API route")
         return _json_get("/repos/" + owner + "/" + repo + suffix, cap=cap)
 
-    def head_commit_sha(self) -> str:
+    def head_commit_sha(self, *,
+                        before_request: Callable[[], None] | None = None) -> str:
         """Lightweight explicit public-ref poll (no tree or blob downloads)."""
         # This Reader persists for hours in PublicGitHubChangeWatch. The
         # 128-call ceiling belongs to one operation, not to its entire life:
         # otherwise harmless 15-minute polling pauses permanently after
         # ~64 polls (~16 hours), even when all API calls succeed.
         self._calls = 0
-        metadata = self._read("")
+        metadata = self._read("", before_request=before_request)
         fullname = metadata.get("full_name")
         if (metadata.get("private") is not False or not isinstance(fullname, str)
                 or fullname.casefold() != (self.owner + "/" + self.repo).casefold()):
@@ -189,7 +199,7 @@ class PublicGitHubReader:
             ref = validate_ref(metadata.get("default_branch"))
         if ref is None:
             raise ValueError("GitHub ref unavailable")
-        commit = self._read("/commits/" + quote(ref, safe="/"))
+        commit = self._read("/commits/" + quote(ref, safe="/"), before_request=before_request)
         sha = commit.get("sha")
         if not isinstance(sha, str) or not _SHA.fullmatch(sha):
             raise ValueError("GitHub ref SHA invalid")
