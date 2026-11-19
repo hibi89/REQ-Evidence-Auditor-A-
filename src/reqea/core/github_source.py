@@ -100,14 +100,15 @@ class PublicGitHubReader:
             raise ValueError("GitHub request budget exceeded")
         owner = quote(self.owner, safe="")
         repo = quote(self.repo, safe="")
-        if not suffix.startswith("/") or "://" in suffix or "\\" in suffix:
+        if (suffix and not suffix.startswith("/")) or "://" in suffix or "\\" in suffix:
             raise ValueError("invalid GitHub API route")
         return _json_get("/repos/" + owner + "/" + repo + suffix, cap=cap)
 
     def pinned_tree(self) -> tuple[str, str, list[dict]]:
         metadata = self._read("")
         if (metadata.get("private") is not False
-                or metadata.get("full_name", "").casefold()
+                or not isinstance(metadata.get("full_name"), str)
+                or metadata["full_name"].casefold()
                 != (self.owner + "/" + self.repo).casefold()):
             raise ValueError("repository is not confirmed public")
         ref = self.requested_ref

@@ -85,7 +85,7 @@ class PublicGitHubSnapshot(unittest.TestCase):
                 with public_github_snapshot("https://github.com/o/r"):
                     pass
         reader = PublicGitHubReader("https://github.com/o/r")
-        with patch.object(reader, "pinned_tree", return_value=("a"*40, "b"*40, [
+        with patch("reqea.core.snapshot.PublicGitHubReader.pinned_tree", return_value=("a"*40, "b"*40, [
                 {"path": "secret.py", "type": "blob", "mode": "100644",
                  "size": 2, "sha": "c"*40}])):
             with self.assertRaisesRegex(ValueError, "no eligible"):
