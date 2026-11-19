@@ -282,7 +282,7 @@ def save_delta(delta: dict, *, out_dir: str, source_root: str | None = None) -> 
     return _append_json(out_dir, "reqea-history", "reqea-delta-", safe,
                         source_root=source_root)
 
-def _validated_profile(profile: dict) -> dict:
+def _validated_profile(profile: dict, *, allow_missing_local: bool = False) -> dict:
     if not isinstance(profile, dict):
         raise ValueError("invalid project registration")
     kind, source = profile.get("kind"), profile.get("source")
@@ -298,7 +298,9 @@ def _validated_profile(profile: dict) -> dict:
                 "source": source, "ref": ref, "requirements": selected}
     if kind == "local" and isinstance(source, str) and source and "\x00" not in source:
         root = Path(source)
-        if not root.is_absolute() or not root.is_dir():
+        # New registrations and analyses require an existing root. Historical
+        # bookmarks remain listable/forgetable after an owner moves the source.
+        if not root.is_absolute() or (not allow_missing_local and not root.is_dir()):
             raise ValueError("registered root must be an existing absolute folder")
         from .source_ref import _safe_path
         _safe_path(root)
@@ -336,7 +338,7 @@ def load_projects(*, out_dir: str) -> list[dict]:
         if fingerprint != p.stem.removeprefix("reqea-profile-"):
             raise ValueError("modified registered project record")
         parsed = json.loads(encoded.decode("utf-8"))
-        safe = _validated_profile(parsed)
+        safe = _validated_profile(parsed, allow_missing_local=True)
         # A self-consistent SHA256 filename does not make arbitrary JSON
         # trustworthy. Accept only the exact canonical record we write;
         # otherwise an extra private-source/authority field or duplicated JSON
@@ -383,10 +385,13 @@ def load_deltas(*, out_dir: str) -> list[dict]:
 
 def unregister_project(profile: dict, *, out_dir: str) -> bool:
     """Explicitly forget a bookmark record only; never delete audit or source."""
-    safe = _validated_profile(profile)
+    safe = _validated_profile(profile, allow_missing_local=True)
     encoded = (json.dumps(safe, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
     digest = hashlib.sha256(encoded).hexdigest()
-    dest = _safe_output(out_dir, source_root=safe["source"] if safe["kind"] == "local" else None)
+    # Only a verified, existing source requires a live containment test.
+    # Missing source: touch only the exact canonical hash-named bookmark.
+    live_root = safe["source"] if safe["kind"] == "local" and Path(safe["source"]).is_dir() else None
+    dest = _safe_output(out_dir, source_root=live_root)
     path = dest / "reqea-projects" / ("reqea-profile-" + digest + ".json")
     _check_no_symlinks(path)
     if not path.exists():
@@ -398,7 +403,7 @@ def unregister_project(profile: dict, *, out_dir: str) -> bool:
 
 
 def project_id(profile: dict) -> str:
-    """Stable SHA256 bookmark identifier without exposing a user path/URL."""
-    safe = _validated_profile(profile)
+    """Stable SHA256 bookmark identifier without requiring the old source."""
+    safe = _validated_profile(profile, allow_missing_local=True)
     raw = (json.dumps(safe, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
     return hashlib.sha256(raw).hexdigest()

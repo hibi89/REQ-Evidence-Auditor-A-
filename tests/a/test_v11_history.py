@@ -133,6 +133,56 @@ class DeltaHistory(unittest.TestCase):
             self.assertEqual(load_projects(out_dir=str(out)), [])
             self.assertEqual(len(load_deltas(out_dir=str(out))), 1)
 
+    def test_moved_source_bookmark_remains_listable_and_explicitly_forgettable(self):
+        import contextlib
+        import io
+        from reqea.core.history import project_id, unregister_project
+
+        with tempfile.TemporaryDirectory() as d:
+            base = Path(d)
+            source = base / "owner-project"
+            source.mkdir()
+            (source / "keep.py").write_bytes(b"SYNTHETIC_OWNER_BYTES")
+            out = base / "approved"
+            profile = {"kind": "local", "source": str(source),
+                       "requirements": "docs/requirements.md"}
+            saved = register_project(profile, out_dir=str(out))
+            saved_bytes = Path(saved["file"]).read_bytes()
+            unrelated = out / "owner-keep.txt"
+            unrelated.write_bytes(b"KEEP_ME")
+            identifier = project_id(profile)
+            moved = base / "moved-outside"
+            source.rename(moved)
+            self.assertFalse(source.exists())
+
+            records = load_projects(out_dir=str(out))
+            self.assertEqual(records, [{"schema_version": "reqea.project.v11",
+                                        **profile, "ref": None}])
+            self.assertEqual(project_id(profile), identifier)
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                self.assertEqual(main(["projects", "--out", str(out)]), 0)
+            listed = json.loads(stdout.getvalue())
+            self.assertEqual(listed["projects"], [{"id": identifier, "kind": "local"}])
+            self.assertNotIn(str(source), stdout.getvalue())
+
+            # The old bookmark cannot authorize an audit of an absent root.
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(main(["audit-source", "--registered", identifier,
+                                       "--out", str(out)]), 2)
+            self.assertEqual(Path(saved["file"]).read_bytes(), saved_bytes)
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                self.assertEqual(main(["projects", "--forget", identifier,
+                                       "--out", str(out)]), 0)
+            self.assertEqual(json.loads(stdout.getvalue())["status"], "FORGOTTEN")
+            self.assertEqual(load_projects(out_dir=str(out)), [])
+            self.assertEqual(unrelated.read_bytes(), b"KEEP_ME")
+            self.assertEqual((moved / "keep.py").read_bytes(), b"SYNTHETIC_OWNER_BYTES")
+            with self.assertRaisesRegex(ValueError, "existing absolute folder"):
+                register_project(profile, out_dir=str(out))
+
     def test_cli_project_registration_listing_selection_and_explicit_forget(self):
         with tempfile.TemporaryDirectory() as d:
             import contextlib, io
