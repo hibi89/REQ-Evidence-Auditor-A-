@@ -169,6 +169,17 @@ class LocalChangeWatch:
             source = inspect_local_source(self.root, requirements)
             if hashlib.sha256(read_checked_requirements(source)).hexdigest() != baseline_doc:
                 raise ValueError("canonical requirements changed during audit")
+            with self._state_lock:
+                if not self.active or generation != self._generation:
+                    return {"status": "STOPPED"}
+                previous = self._audit
+                self._audit = new_audit
+                self._fingerprint = fingerprint
+                self._pending = None
+                return {"status": "CHANGED", "previous": previous, "current": new_audit,
+                        "fingerprint": fingerprint,
+                        "source_sha": new_audit.get("source_sha", "UNVERIFIED"),
+                        "verification_status": "NOT_RUN"}
         except (ValueError, OSError, UnicodeError):
             with self._state_lock:
                 if not self.active or generation != self._generation:
@@ -179,17 +190,6 @@ class LocalChangeWatch:
         finally:
             with self._state_lock:
                 self._polling = False
-        with self._state_lock:
-            if not self.active or generation != self._generation:
-                return {"status": "STOPPED"}
-            previous = self._audit
-            self._audit = new_audit
-            self._fingerprint = fingerprint
-            self._pending = None
-            return {"status": "CHANGED", "previous": previous, "current": new_audit,
-                    "fingerprint": fingerprint,
-                    "source_sha": new_audit.get("source_sha", "UNVERIFIED"),
-                    "verification_status": "NOT_RUN"}
 
 class PublicGitHubChangeWatch:
     """Opt-in 15-minute+ public-ref polling with fail-closed backoff."""
@@ -272,6 +272,16 @@ class PublicGitHubChangeWatch:
                 selection, audit = _candidate_audit(snapshot["root"], selected)
                 if selection["sha256"] != document_digest:
                     raise ValueError("canonical document changed; explicit review required")
+            with self._state_lock:
+                if not self.active or generation != self._generation:
+                    return {"status": "STOPPED"}
+                old_audit = self._audit
+                self._audit = audit
+                self._head = head
+                self._backoff = self.interval
+                return {"status": "CHANGED", "previous": old_audit, "current": audit,
+                        "pinned_commit_sha": head, "source_sha": "UNVERIFIED",
+                        "verification_status": "NOT_RUN"}
         except (ValueError, OSError, UnicodeError) as exc:
             with self._state_lock:
                 if not self.active or generation != self._generation:
@@ -285,13 +295,3 @@ class PublicGitHubChangeWatch:
         finally:
             with self._state_lock:
                 self._polling = False
-        with self._state_lock:
-            if not self.active or generation != self._generation:
-                return {"status": "STOPPED"}
-            old_audit = self._audit
-            self._audit = audit
-            self._head = head
-            self._backoff = self.interval
-            return {"status": "CHANGED", "previous": old_audit, "current": audit,
-                    "pinned_commit_sha": head, "source_sha": "UNVERIFIED",
-                    "verification_status": "NOT_RUN"}
