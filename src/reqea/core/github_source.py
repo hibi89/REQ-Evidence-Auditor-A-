@@ -150,7 +150,10 @@ class PublicGitHubReader:
             raw = base64.b64decode("".join(encoded.split()), validate=True)
         except (ValueError, binascii.Error):
             raise ValueError("invalid GitHub blob encoding") from None
-        digest = hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + b"\0" + raw).hexdigest()
+        digest = hashlib.sha1(  # Git object ID interoperability, not a security hash
+            b"blob " + str(len(raw)).encode("ascii") + b"\0" + raw,
+            usedforsecurity=False,
+        ).hexdigest()
         if len(raw) != declared or digest != sha.lower():
             raise ValueError("GitHub blob content failed SHA check")
         return raw
