@@ -108,7 +108,7 @@ class PublicGitHubReader:
             selected = suffix[len("/commits/"):]
             if not selected or validate_ref(selected) != selected:
                 raise ValueError("invalid GitHub commit route")
-        elif re.fullmatch(r"/git/trees/[0-9a-fA-F]{40}\\?recursive=1", suffix):
+        elif re.fullmatch(r"/git/trees/[0-9a-fA-F]{40}\?recursive=1", suffix):
             pass
         elif re.fullmatch(r"/git/blobs/[0-9a-fA-F]{40}", suffix):
             pass
