@@ -123,6 +123,27 @@ with tempfile.TemporaryDirectory() as d:
             pump(app, lambda: "저장:" in app.status_text.get()
                  and app.start_button.instate(["!disabled"]), "registered project audit")
             assert (v11out / "audit.json").is_file()
+            # Real Tk: allow register-first / discover-later. The registered
+            # record itself must remain immutable when a canonical document
+            # is chosen for a single session.
+            app.mode.set("local")
+            app.paths["requirements"].set("")
+            app.register_selected_project()
+            blank = next((i for i, p in enumerate(app._profiles)
+                          if p["kind"] == "local" and p["requirements"] is None), None)
+            assert blank is not None, "register-first bookmark missing"
+            app.mode.set("registered")
+            app.profile_choice.set(app._profile_labels[blank])
+            app.discover_documents()
+            assert "로컬 정본 선택:" in app.status_text.get(), app.status_text.get()
+            assert app._source()["requirements"] == "requirements.md"
+            app.start_audit()
+            pump(app, lambda: "저장:" in app.status_text.get()
+                 and app.start_button.instate(["!disabled"]),
+                 "registered local post-discovery audit")
+            assert any(p["requirements"] is None for p in
+                       __import__("reqea.core.history", fromlist=["load_projects"]).load_projects(
+                           out_dir=str(v11out))), "bookmark must stay unchanged"
             # A cached registered project is never authorization to audit from
             # another output folder. Real Tk button path must reject it.
             app.paths["out"].set(str(base / "unapproved-registry"))

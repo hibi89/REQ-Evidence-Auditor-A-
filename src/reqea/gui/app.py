@@ -147,7 +147,11 @@ class AuditorApp(tk.Tk):
                     self.remote_ref.get().strip(), self.document_choice.get().strip(),
                     output)
         if mode == "registered":
-            return (mode, self.profile_choice.get(), output)
+            # A newly accepted local document is a separate user selection
+            # even when the immutable bookmark originally had no REQ path.
+            return (mode, self.profile_choice.get(), output,
+                    self.paths["requirements"].get().strip(),
+                    self.document_choice.get().strip())
         return (mode, output)
 
     def _audit_scope_inputs(self) -> tuple[str, ...]:
@@ -227,7 +231,23 @@ class AuditorApp(tk.Tk):
             # output-folder switch or an on-disk tamper.
             if saved not in load_projects(out_dir=self.paths["out"].get().strip()):
                 raise ValueError("saved project registry changed; reload required")
-            return dict(saved)
+            result = dict(saved)
+            # A bookmark may be registered before a canonical REQ is chosen.
+            # After an explicit in-session discovery+selection, bind that
+            # approved candidate to this run WITHOUT changing the bookmark.
+            if result["kind"] == "local" and not result.get("requirements"):
+                selected = self.paths["requirements"].get().strip()
+                found = self.local_discovery
+                root = Path(result["source"]).absolute()
+                if selected and found and Path(found.get("root", "")) == root:
+                    candidate = Path(selected)
+                    try:
+                        relative = candidate.relative_to(root).as_posix()
+                    except ValueError as exc:
+                        raise ValueError("selected requirements outside registered root") from exc
+                    resolved = select_requirements(found, relative)
+                    result["requirements"] = resolved["relative_path"]
+            return result
         if mode == "local":
             root = self.paths["repo"].get().strip()
             if not root:

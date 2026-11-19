@@ -221,6 +221,62 @@ class CallerToCalleeSourceAudit(unittest.TestCase):
                     self.assertEqual(requirement.read_bytes(), original)
             self.assertEqual(loads, [True])
 
+    def test_registered_without_req_can_select_local_discovery_without_rewriting_bookmark(self):
+        from reqea.core.discovery import discover_local_requirements
+        from reqea.core.history import register_project, load_projects
+        from reqea.gui.app import AuditorApp
+        from types import SimpleNamespace
+
+        class Var:
+            def __init__(self, v=""):
+                self.value = v
+            def get(self):
+                return self.value
+            def set(self, value):
+                self.value = value
+
+        with tempfile.TemporaryDirectory() as d:
+            base = Path(d)
+            root = base / "registered-root"
+            root.mkdir()
+            _make(root)
+            out = base / "approved-output"
+            profile = {"kind": "local", "source": str(root),
+                       "requirements": None, "ref": None}
+            bookmark = register_project(profile, out_dir=str(out))
+            original = Path(bookmark["file"]).read_bytes()
+            profiles = load_projects(out_dir=str(out))
+            label = "1. local registered"
+            fake = SimpleNamespace(
+                mode=Var("registered"), paths={
+                    "out": Var(str(out)), "requirements": Var("")},
+                profile_choice=Var(label), document_choice=Var("docs/FINAL_BLUEPRINT.md"),
+                _profiles=profiles, _profile_labels=[label],
+                local_discovery=discover_local_requirements(str(root)),
+                status_text=Var("")
+            )
+            fake._source = lambda: AuditorApp._source(fake)
+            self.assertIsNone(fake._source()["requirements"])
+            AuditorApp.accept_discovered_document(fake)
+            self.assertEqual(fake._source()["requirements"], "docs/FINAL_BLUEPRINT.md")
+            self.assertIn("로컬 정본 선택:", fake.status_text.get())
+            self.assertEqual(Path(bookmark["file"]).read_bytes(), original)
+            self.assertIsNone(load_projects(out_dir=str(out))[0]["requirements"])
+
+            # Changing the selected REQ document after discovery must fail
+            # closed. Stale GUI candidates must not authorize changed bytes.
+            document = root / "docs" / "FINAL_BLUEPRINT.md"
+            document.write_text("# REQ-001 changed\\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "changed since discovery"):
+                fake._source()
+            self.assertEqual(Path(bookmark["file"]).read_bytes(), original)
+
+            # A different approved output folder cannot borrow this bookmark.
+            fake.paths["out"].set(str(base / "other-output"))
+            with self.assertRaisesRegex(ValueError, "saved project registry changed"):
+                fake._source()
+            self.assertFalse((base / "other-output").exists())
+
     def test_ref_on_local_root_and_output_inside_source_rejected(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d) / "repo"
