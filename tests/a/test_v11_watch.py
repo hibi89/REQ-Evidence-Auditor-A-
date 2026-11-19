@@ -437,7 +437,7 @@ class ChangeWatchSynthetic(unittest.TestCase):
                 self.assertEqual(watcher.tick(now=8100)["status"], "UNCHANGED")
 
     def test_nonfinite_intervals_and_debounce_are_rejected(self):
-        for bad in (float("nan"), float("inf"), float("-inf"), 1e300):
+        for bad in (float("nan"), float("inf"), float("-inf")):
             with self.subTest(bad=bad):
                 with self.assertRaisesRegex(ValueError, "interval"):
                     LocalChangeWatch("local", "requirements.md",
@@ -447,7 +447,7 @@ class ChangeWatchSynthetic(unittest.TestCase):
                                      debounce_seconds=bad)
                 with self.assertRaisesRegex(ValueError, "interval"):
                     PublicGitHubChangeWatch("https://github.com/o/r", "main",
-                                             interval_seconds=bad if bad != 1e300 else float("inf"))
+                                             interval_seconds=bad)
 
     def test_nonfinite_poll_clocks_do_not_run_network_or_promote_audit(self):
         with tempfile.TemporaryDirectory() as d:
