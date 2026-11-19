@@ -78,6 +78,81 @@ class PublicGitHubSnapshot(unittest.TestCase):
                 self.assertEqual(caught.exception.retry_seconds, 3600)
                 self.assertNotIn("untrusted", str(caught.exception))
 
+    def test_offline_transport_and_timeout_are_retryable_but_tls_stays_fatal(self):
+        import ssl
+        from urllib.error import URLError
+
+        class FailingOpener:
+            def __init__(self, error):
+                self.error = error
+
+            def open(self, request, timeout):
+                raise self.error
+
+        for error in (URLError(ConnectionResetError("private host name")),
+                      TimeoutError("private host name"), OSError("private host name")):
+            with self.subTest(error=type(error).__name__):
+                with patch.object(github_source, "build_opener",
+                                  return_value=FailingOpener(error)):
+                    with self.assertRaises(github_source.GitHubTransientError) as caught:
+                        github_source._json_get("/repos/o/r")
+                self.assertIsNone(caught.exception.retry_seconds)
+                self.assertNotIn("private host name", str(caught.exception))
+
+        for error in (URLError(ssl.SSLError("untrusted certificate")),
+                      ssl.SSLError("untrusted certificate")):
+            with self.subTest(error=type(error).__name__):
+                with patch.object(github_source, "build_opener",
+                                  return_value=FailingOpener(error)):
+                    with self.assertRaisesRegex(ValueError, "TLS/transport") as caught:
+                        github_source._json_get("/repos/o/r")
+                self.assertNotIsInstance(caught.exception, github_source.GitHubRetryableError)
+                self.assertNotIn("untrusted certificate", str(caught.exception))
+
+    def test_offline_watch_keeps_last_audit_backs_off_and_recovers(self):
+        from urllib.error import URLError
+        from reqea.core.watch import PublicGitHubChangeWatch
+
+        watcher = PublicGitHubChangeWatch("https://github.com/o/r", ref="main")
+        previous = {"schema_version": "reqea.v1", "marker": "prior-readonly-audit"}
+        watcher.active = True
+        watcher._head = "a" * 40
+        watcher._audit = previous
+        watcher._checked_at = 0.0
+
+        class OfflineOpener:
+            def open(self, request, timeout):
+                raise URLError(ConnectionResetError("private network detail"))
+
+        with patch.object(github_source, "build_opener", return_value=OfflineOpener()):
+            result = watcher.tick(now=900.0)
+        self.assertEqual(result["status"], "BACKOFF")
+        self.assertEqual(result["retry_seconds"], 1800.0)
+        self.assertTrue(watcher.active)
+        self.assertIs(watcher._audit, previous)
+        self.assertEqual(watcher._head, "a" * 40)
+
+        # The backoff must suppress HTTP while offline.
+        with patch.object(github_source, "_json_get", side_effect=AssertionError("early GET")):
+            self.assertEqual(watcher.tick(now=2699.0)["status"], "WAIT")
+
+        calls = []
+        def healthy_get(path, *, cap=2_000_000):
+            calls.append(path)
+            if path.endswith("/o/r"):
+                return {"private": False, "full_name": "o/r", "default_branch": "main"}
+            if path.endswith("/commits/main"):
+                return {"sha": "a" * 40}
+            raise AssertionError("unexpected GitHub read-only route")
+
+        with patch.object(github_source, "_json_get", side_effect=healthy_get):
+            self.assertEqual(watcher.tick(now=2700.0)["status"], "UNCHANGED")
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(watcher.active)
+        self.assertIs(watcher._audit, previous)
+        self.assertEqual(watcher._head, "a" * 40)
+        self.assertEqual(watcher._backoff, 900.0)
+
     def test_permanent_401_404_501_do_not_retry(self):
         for code in (401, 404, 501):
             with self.subTest(code=code):

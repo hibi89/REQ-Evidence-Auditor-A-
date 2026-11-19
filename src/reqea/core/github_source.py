@@ -148,8 +148,17 @@ def _json_get(path: str, *, cap: int = _MAX_JSON) -> dict:
         if exc.code in (401, 404):
             raise ValueError("GitHub repository/ref unavailable or not public") from None
         raise ValueError("GitHub API rejected request") from None
-    except (URLError, TimeoutError, OSError) as exc:
-        raise ValueError("GitHub API network unavailable") from None
+    except URLError as exc:
+        # Temporary transport loss must not permanently pause an explicitly
+        # opted-in watch. TLS/certificate failures remain fatal: never turn
+        # a failed authentication boundary into an automatic retry loop.
+        if isinstance(exc.reason, (ssl.SSLError, ValueError)):
+            raise ValueError("GitHub TLS/transport security validation failed") from None
+        raise GitHubTransientError() from None
+    except (TimeoutError, OSError) as exc:
+        if isinstance(exc, ssl.SSLError):
+            raise ValueError("GitHub TLS/transport security validation failed") from None
+        raise GitHubTransientError() from None
     try:
         result = json.loads(body.decode("utf-8"))
     except (UnicodeError, json.JSONDecodeError) as exc:
