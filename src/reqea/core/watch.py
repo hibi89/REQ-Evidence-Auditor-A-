@@ -6,6 +6,7 @@ No daemon, Actions schedule, remote writing, or post-exit background activity.
 from __future__ import annotations
 
 import hashlib
+import math
 from pathlib import Path
 from threading import Lock
 import time
@@ -26,6 +27,26 @@ _FATAL = frozenset({"required_B_or_C_module_unavailable", "B_contract_or_SHA_mis
 _MIN_LOCAL_SECONDS = 30.0
 _MIN_GITHUB_SECONDS = 900.0
 _DEBOUNCE_SECONDS = 5.0
+
+
+def _valid_duration(value, minimum: float) -> bool:
+    """Do not allow NaN/Infinity to bypass minimum polling intervals."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        return math.isfinite(value) and value >= minimum
+    except (OverflowError, TypeError, ValueError):
+        return False
+
+
+def _poll_time(now: float | None) -> float:
+    try:
+        moment = time.monotonic() if now is None else float(now)
+    except (OverflowError, TypeError, ValueError):
+        raise ValueError("invalid watcher timestamp") from None
+    if not math.isfinite(moment):
+        raise ValueError("invalid watcher timestamp")
+    return moment
 
 
 def _candidate_audit(root: str, selected: str | None) -> tuple[dict, dict]:
@@ -59,9 +80,9 @@ class LocalChangeWatch:
     def __init__(self, root: str, requirements: str, *,
                  interval_seconds: float = _MIN_LOCAL_SECONDS,
                  debounce_seconds: float = _DEBOUNCE_SECONDS):
-        if not isinstance(interval_seconds, (int, float)) or interval_seconds < _MIN_LOCAL_SECONDS:
+        if not _valid_duration(interval_seconds, _MIN_LOCAL_SECONDS):
             raise ValueError("local poll interval must be at least 30 seconds")
-        if not isinstance(debounce_seconds, (int, float)) or debounce_seconds < _DEBOUNCE_SECONDS:
+        if not _valid_duration(debounce_seconds, _DEBOUNCE_SECONDS):
             raise ValueError("local debounce must be at least 5 seconds")
         self.root = root
         self.requirements = requirements
@@ -110,7 +131,7 @@ class LocalChangeWatch:
             self._audit = candidate
             self._fingerprint = later_fingerprint
             self._pending = None
-            self._checked_at = time.monotonic() if now is None else float(now)
+            self._checked_at = _poll_time(now)
             self._generation += 1
             self.active = True
             return {"status": "STARTED", "audit": self._audit,
@@ -125,7 +146,7 @@ class LocalChangeWatch:
 
     def tick(self, *, now: float | None = None) -> dict:
         """One bounded poll. STOP and concurrent ticks cannot publish stale state."""
-        moment = time.monotonic() if now is None else float(now)
+        moment = _poll_time(now)
         with self._state_lock:
             if not self.active:
                 return {"status": "STOPPED"}
@@ -197,7 +218,7 @@ class PublicGitHubChangeWatch:
     def __init__(self, url: str, ref: str | None = None,
                  requirements: str | None = None, *,
                  interval_seconds: float = _MIN_GITHUB_SECONDS):
-        if not isinstance(interval_seconds, (int, float)) or interval_seconds < _MIN_GITHUB_SECONDS:
+        if not _valid_duration(interval_seconds, _MIN_GITHUB_SECONDS):
             raise ValueError("GitHub poll interval must be at least 900 seconds")
         self.reader = PublicGitHubReader(url, ref)
         self.url = url
@@ -229,7 +250,7 @@ class PublicGitHubChangeWatch:
             self._document_digest = selection["sha256"]
             self._audit = audit
             self._head = head
-            self._checked_at = time.monotonic() if now is None else float(now)
+            self._checked_at = _poll_time(now)
             self._backoff = self.interval
             self._generation += 1
             self.active = True
@@ -245,7 +266,7 @@ class PublicGitHubChangeWatch:
 
     def tick(self, *, now: float | None = None) -> dict:
         """No concurrent remote polling, stale state, or post-STOP promotion."""
-        moment = time.monotonic() if now is None else float(now)
+        moment = _poll_time(now)
         with self._state_lock:
             if not self.active:
                 return {"status": "STOPPED"}

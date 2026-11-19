@@ -436,6 +436,50 @@ class ChangeWatchSynthetic(unittest.TestCase):
                 query.assert_not_called()
                 self.assertEqual(watcher.tick(now=8100)["status"], "UNCHANGED")
 
+    def test_nonfinite_intervals_and_debounce_are_rejected(self):
+        for bad in (float("nan"), float("inf"), float("-inf"), 1e300):
+            with self.subTest(bad=bad):
+                with self.assertRaisesRegex(ValueError, "interval"):
+                    LocalChangeWatch("local", "requirements.md",
+                                     interval_seconds=bad)
+                with self.assertRaisesRegex(ValueError, "debounce"):
+                    LocalChangeWatch("local", "requirements.md",
+                                     debounce_seconds=bad)
+                with self.assertRaisesRegex(ValueError, "interval"):
+                    PublicGitHubChangeWatch("https://github.com/o/r", "main",
+                                             interval_seconds=bad if bad != 1e300 else float("inf"))
+
+    def test_nonfinite_poll_clocks_do_not_run_network_or_promote_audit(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "source"
+            req = _project(root)
+            local = LocalChangeWatch(str(root), str(req))
+            with self.assertRaisesRegex(ValueError, "timestamp"):
+                local.start(now=float("nan"))
+            self.assertFalse(local.active)
+            local.start(now=0)
+            prior = local._audit
+            with self.assertRaisesRegex(ValueError, "timestamp"):
+                local.tick(now=float("inf"))
+            self.assertIs(local._audit, prior)
+            self.assertTrue(local.active)
+
+            @contextmanager
+            def fake_snapshot(url, ref):
+                yield {"root": str(root), "owner": "o", "repository": "r",
+                       "commit_sha": "a" * 40, "source_sha": "UNVERIFIED"}
+
+            remote = PublicGitHubChangeWatch("https://github.com/o/r",
+                                              "main", "requirements.md")
+            with patch("reqea.core.watch.public_github_snapshot",
+                       side_effect=fake_snapshot):
+                remote.start(now=0)
+            with patch.object(remote.reader, "head_commit_sha") as poll:
+                with self.assertRaisesRegex(ValueError, "timestamp"):
+                    remote.tick(now=float("nan"))
+                poll.assert_not_called()
+            self.assertTrue(remote.active)
+
     def test_remote_rate_limit_backs_off_then_stop(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d) / "public"
