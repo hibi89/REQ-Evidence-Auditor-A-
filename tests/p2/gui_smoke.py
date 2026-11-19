@@ -110,7 +110,9 @@ with tempfile.TemporaryDirectory() as d:
                 "Acceptance criteria:\n- static candidate only\n", encoding="utf-8")
             v11out = base / "v11-output"
             app.paths["repo"].set(str(small))
-            app.paths["requirements"].set(str(small_req))
+            # Real Tk caller: a project-relative document must register even
+            # though the process working directory is not the selected root.
+            app.paths["requirements"].set("requirements.md")
             app.paths["out"].set(str(v11out))
             app.allow_overwrite.set(True)
             app.mode.set("local")

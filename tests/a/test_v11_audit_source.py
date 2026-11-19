@@ -170,6 +170,57 @@ class CallerToCalleeSourceAudit(unittest.TestCase):
             self.assertEqual(Path(created["file"]).read_bytes(), original + b" ")
             self.assertEqual((root / "keep.py").read_bytes(), b"OWNER_SOURCE_UNCHANGED")
 
+    def test_gui_registration_relative_document_is_root_scoped_not_process_cwd(self):
+        from types import SimpleNamespace
+        from reqea.gui.app import AuditorApp
+        from reqea.core.history import load_projects
+
+        class Var:
+            def __init__(self, v=""):
+                self.value = v
+            def get(self):
+                return self.value
+            def set(self, v):
+                self.value = v
+
+        with tempfile.TemporaryDirectory() as d:
+            base = Path(d)
+            root = base / "owner-project"
+            docs = root / "docs"
+            docs.mkdir(parents=True)
+            requirement = docs / "requirements.md"
+            requirement.write_bytes(b"# REQ-001 synthetic\\n")
+            original = requirement.read_bytes()
+            out = base / "approved-output"
+            target = {"kind": "local", "source": str(root),
+                      "requirements": "docs/requirements.md", "ref": None}
+            loads = []
+            fake = SimpleNamespace(
+                mode=Var("local"), status_text=Var(),
+                paths={"out": Var(str(out))},
+                _source=lambda: dict(target),
+                load_registered_projects=lambda: loads.append(True))
+            AuditorApp.register_selected_project(fake)
+            self.assertIn("프로젝트 등록 SAVED", fake.status_text.get())
+            self.assertEqual(loads, [True])
+            saved = load_projects(out_dir=str(out))
+            self.assertEqual(len(saved), 1)
+            self.assertEqual(saved[0]["requirements"], "docs/requirements.md")
+            self.assertEqual(saved[0]["source"], str(root))
+            self.assertEqual(requirement.read_bytes(), original)
+
+            # Absolute path outside the selected project is never a valid
+            # registration, and a root-relative '..' cannot escape either.
+            for refused in (str(base / "outside" / "requirements.md"),
+                            "../outside/requirements.md"):
+                with self.subTest(refused=refused):
+                    target["requirements"] = refused
+                    AuditorApp.register_selected_project(fake)
+                    self.assertIn("프로젝트 등록 차단", fake.status_text.get())
+                    self.assertEqual(len(load_projects(out_dir=str(out))), 1)
+                    self.assertEqual(requirement.read_bytes(), original)
+            self.assertEqual(loads, [True])
+
     def test_ref_on_local_root_and_output_inside_source_rejected(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d) / "repo"

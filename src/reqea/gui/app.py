@@ -402,8 +402,13 @@ class AuditorApp(tk.Tk):
             target = self._source()
             if target["kind"] == "local" and target.get("requirements"):
                 root = Path(target["source"]).absolute()
-                selected = Path(target["requirements"]).absolute()
-                target["requirements"] = selected.relative_to(root).as_posix()
+                selected = Path(target["requirements"])
+                # A relative REQ document belongs to the user-selected
+                # project, never the application's unrelated working dir.
+                # Keep the existing no-escape check for absolute selections.
+                if not selected.is_absolute():
+                    selected = root / selected
+                target["requirements"] = selected.absolute().relative_to(root).as_posix()
             info = register_project(target, out_dir=self.paths["out"].get().strip())
             self.status_text.set(f"프로젝트 등록 {info['status']} · 사용자 지정 결과 폴더에만 기록")
             self.load_registered_projects()
