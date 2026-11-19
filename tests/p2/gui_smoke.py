@@ -264,7 +264,7 @@ with tempfile.TemporaryDirectory() as d:
             app.poll()
             assert second_cancel.is_set() and not app._discovering
             assert app.remote_discovery is None
-            assert app.candidate_picker.cget("values") == ()
+            assert not app.candidate_picker.cget("values"), "cancelled discovery must clear candidates"
             assert app.discover_button.instate(["!disabled"])
             print("V1.1 registered project, opt-in watch, local-only delta and "
                   "public-GitHub GUI source route: synthetic PASS; live network NOT_RUN")
