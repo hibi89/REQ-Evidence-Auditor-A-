@@ -191,7 +191,7 @@ class ChangeWatchSynthetic(unittest.TestCase):
             old,new="a"*40,"b"*40
             watcher=PublicGitHubChangeWatch("https://github.com/o/r","main","requirements.md")
             @contextmanager
-            def synthetic(url,ref):
+            def synthetic(url,ref,*,before_request=None):
                 if ref==new:
                     watcher.stop()
                 yield {"root":str(root),"commit_sha":new if ref==new else old,
@@ -639,8 +639,7 @@ class ChangeWatchSynthetic(unittest.TestCase):
                 return b"x"
         with patch("reqea.core.snapshot.PublicGitHubReader", SyntheticReader), \
              patch("reqea.core.snapshot.tempfile.TemporaryDirectory", side_effect=track_temp):
-            with self.assertRaisesRegex(ValueError, "cancelled"):
-                watcher.start(now=0)
+            self.assertEqual(watcher.start(now=0)["status"], "STOPPED")
         self.assertEqual(reads, ["1" * 40])
         self.assertEqual(len(roots), 1)
         self.assertFalse(roots[0].exists())

@@ -273,11 +273,19 @@ class PublicGitHubChangeWatch:
             with self._state_lock:
                 if self._cancel_pending_start or generation != self._generation:
                     raise ValueError("public GitHub watch cancelled")
-        with public_github_snapshot(self.url, self.ref,
-                                    before_request=ensure_not_cancelled) as snapshot:
-            ensure_not_cancelled()
-            selection, audit = _candidate_audit(snapshot["root"], self.requirements)
-            head = snapshot["commit_sha"]
+        try:
+            with public_github_snapshot(self.url, self.ref,
+                                        before_request=ensure_not_cancelled) as snapshot:
+                ensure_not_cancelled()
+                selection, audit = _candidate_audit(snapshot["root"], self.requirements)
+                head = snapshot["commit_sha"]
+        except ValueError:
+            # An explicitly cancelled start preserves the old public STOPPED
+            # contract. Other network/scope/analysis errors still fail closed.
+            with self._state_lock:
+                if self._cancel_pending_start or generation != self._generation:
+                    return {"status": "STOPPED"}
+            raise
         with self._state_lock:
             if self._cancel_pending_start or generation != self._generation:
                 return {"status": "STOPPED"}
