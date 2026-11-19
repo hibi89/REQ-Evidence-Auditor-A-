@@ -54,6 +54,9 @@ class AuditorApp(tk.Tk):
         self._watcher: LocalChangeWatch | PublicGitHubChangeWatch | None = None
         self._starting_watcher: LocalChangeWatch | PublicGitHubChangeWatch | None = None
         self._watch_commit_lock = threading.Lock()  # STOP cannot return before a delta commit
+        self._audit_commit_lock = threading.Lock()  # input revocation vs audit output commit
+        self._audit_cancel_event: threading.Event | None = None
+        self._audit_input_scope: tuple[str, ...] | None = None
         self._watch_out = ""
         self._watch_source_root: str | None = None
         self._watch_token: str | None = None
@@ -126,7 +129,8 @@ class AuditorApp(tk.Tk):
                   justify="left").pack(fill="x", anchor="w", pady=8)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         for setting in (self.mode, *self.paths.values(), self.remote_url,
-                        self.remote_ref, self.document_choice, self.profile_choice):
+                        self.remote_ref, self.document_choice, self.profile_choice,
+                        self.allow_overwrite):
             setting.trace_add("write", self._on_watch_input_changed)
         self.after(100, self.poll)
         self.after(1200, self._watch_cycle)
@@ -145,6 +149,10 @@ class AuditorApp(tk.Tk):
         if mode == "registered":
             return (mode, self.profile_choice.get(), output)
         return (mode, output)
+
+    def _audit_scope_inputs(self) -> tuple[str, ...]:
+        """Explicit audit consent binds source, canonical doc, output and overwrite."""
+        return (*self._watch_scope_inputs(), str(bool(self.allow_overwrite.get())))
 
     def _discovery_scope_inputs(self) -> tuple[str, ...]:
         """Only inputs that determine the pending local/public source."""
@@ -174,7 +182,18 @@ class AuditorApp(tk.Tk):
 
     def _on_watch_input_changed(self, *_args: str) -> None:
         # Every Tk edit is checked synchronously before the next GUI timer.
-        # Discovery and watch have independent cancellation generations.
+        # Audit, discovery and watch have independent cancellation authorities.
+        active_audit = self._audit_cancel_event
+        if (active_audit is not None and not active_audit.is_set()
+                and self._audit_input_scope is not None
+                and self._audit_scope_inputs() != self._audit_input_scope):
+            # An audit might be busy rendering/saving. Input change waits for
+            # an already-started atomic commit, then prevents ALL later saves.
+            with self._audit_commit_lock:
+                active_audit.set()
+            if not self._closing:
+                self.status_text.set("분석 취소 요청 · 소스/정본/결과/덮어쓰기 선택 변경")
+
         scope = self._watch_input_scope
         if scope is not None and self._watch_scope_inputs() != scope:
             self.stop_watch()
@@ -365,34 +384,60 @@ class AuditorApp(tk.Tk):
                     self.status_text.set("선택한 원격 문서가 후보에 없습니다")
                     return
                 expected_doc_sha = matches[0]["sha256"]
+        cancel = threading.Event()
+        self._audit_cancel_event = cancel
+        self._audit_input_scope = self._audit_scope_inputs()
         self.start_button.state(["disabled"])
         self.status_text.set("선택된 소스만 읽기 전용 분석 중...")
         threading.Thread(target=self._run, args=(target, out, self.allow_overwrite.get(),
-                                                  chosen, pin, expected_doc_sha),
+                                                  chosen, pin, expected_doc_sha, cancel),
                          daemon=True).start()
 
     def _run(self, target: dict, out: str, overwrite: bool,
              chosen: str | None = None, pin: str | None = None,
-             expected_doc_sha: str | None = None) -> None:
+             expected_doc_sha: str | None = None,
+             cancel: threading.Event | None = None) -> None:
+        def guard() -> None:
+            if self._closing or (cancel is not None and cancel.is_set()):
+                raise ValueError("audit selection revoked")
+
+        def commit(audit: dict, source_root: str) -> None:
+            # No stale output creation after a changed-input callback returns.
+            # save_artifacts already protects concurrent writers and backups.
+            if cancel is None:
+                self._render_and_save(audit, source_root, out, overwrite)
+            else:
+                with self._audit_commit_lock:
+                    guard()
+                    self._render_and_save(audit, source_root, out, overwrite)
+
         try:
+            guard()
             if target["kind"] == "local":
                 root = target["source"]
                 doc = Path(target["requirements"])
                 if not doc.is_absolute():
                     doc = Path(root) / doc
                 audit = build_audit(root, str(doc))
-                self._render_and_save(audit, root, out, overwrite)
+                commit(audit, root)
             else:
-                with public_github_snapshot(target["source"], pin or target.get("ref")) as snap:
+                with public_github_snapshot(target["source"], pin or target.get("ref"),
+                                            before_request=guard) as snap:
                     found = discover_local_requirements(snap["root"])
                     selected = select_requirements(found, chosen)
                     if expected_doc_sha and selected["sha256"] != expected_doc_sha:
                         raise ValueError("remote canonical content changed")
                     audit = build_audit(snap["root"], selected["requirements_path"])
-                    self._render_and_save(audit, snap["root"], out, overwrite)
-            self.messages.put((True, f"상태: {audit['status']} · 저장: audit.json, report.html, manifest.json · P2 NOT_RUN"))
+                    commit(audit, snap["root"])
+            if cancel is not None and cancel.is_set():
+                self.messages.put((False, "분석 취소 · 이전 저장은 취소 전에 완료되었을 수 있습니다"))
+            else:
+                self.messages.put((True, f"상태: {audit['status']} · 저장: audit.json, report.html, manifest.json · P2 NOT_RUN"))
         except (ValueError, OSError, ImportError, UnicodeError, TypeError, KeyError) as exc:
-            self.messages.put((False, f"분석 중단: {type(exc).__name__} · 입력/권한/계약 확인 (UNASSESSED)"))
+            if cancel is not None and cancel.is_set():
+                self.messages.put((False, "분석 취소 · 소스/결과 선택 변경 (UNASSESSED)"))
+            else:
+                self.messages.put((False, f"분석 중단: {type(exc).__name__} · 입력/권한/계약 확인 (UNASSESSED)"))
 
     def register_selected_project(self) -> None:
         if self.mode.get() == "registered":
@@ -577,9 +622,11 @@ class AuditorApp(tk.Tk):
         except queue.Empty:
             pass
         else:
+            self._audit_cancel_event = None
+            self._audit_input_scope = None
             self.status_text.set(message)
             self.start_button.state(["!disabled"])
-            if not success:
+            if not success and not message.startswith("분석 취소"):
                 messagebox.showwarning("분석 미완료", message, parent=self)
         for _ in range(30):
             try:
@@ -634,6 +681,10 @@ class AuditorApp(tk.Tk):
 
     def _on_close(self) -> None:
         self._closing = True
+        # Prevent queued public GETs and any new audit artifact commit.
+        with self._audit_commit_lock:
+            if self._audit_cancel_event is not None:
+                self._audit_cancel_event.set()
         if self._discovering:
             self._cancel_pending_discovery()
         self.stop_watch()

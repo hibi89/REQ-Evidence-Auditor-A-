@@ -211,7 +211,9 @@ with tempfile.TemporaryDirectory() as d:
             from contextlib import contextmanager
 
             @contextmanager
-            def fake_snapshot(url, ref=None):
+            def fake_snapshot(url, ref=None, *, before_request=None):
+                if before_request is not None:
+                    before_request()
                 assert url == "https://github.com/example/example"
                 assert ref == "main"
                 yield {"root": str(small), "owner": "example",
@@ -277,6 +279,63 @@ with tempfile.TemporaryDirectory() as d:
             assert app.remote_discovery is None
             assert not app.candidate_picker.cget("values"), "cancelled discovery must clear candidates"
             assert app.discover_button.instate(["!disabled"])
+            # Explicit audit consent must be revoked on input changes too:
+            # a prior network request may finish, but no next GET nor any
+            # output commit is allowed after cancellation.
+            from threading import Event
+            entered, release = Event(), Event()
+            revoked_output = base / "revoked-audit-output"
+            app.mode.set("github")
+            app.remote_url.set("https://github.com/example/example")
+            app.remote_ref.set("main")
+            app.document_choice.set("requirements.md")
+            app.paths["out"].set(str(revoked_output))
+            @contextmanager
+            def delayed_snapshot(url, ref=None, *, before_request=None):
+                if before_request is not None:
+                    before_request()
+                entered.set()
+                assert release.wait(timeout=12), "audit network gate never released"
+                # Models a second GET after an in-flight network operation.
+                if before_request is not None:
+                    before_request()
+                yield {"root": str(small), "owner": "example", "repository": "example",
+                       "commit_sha": "a"*40, "tree_sha": "b"*40}
+            with patch("reqea.gui.app.public_github_snapshot", side_effect=delayed_snapshot):
+                app.start_audit()
+                assert entered.wait(timeout=12), "audit did not enter remote read"
+                app.remote_ref.set("feature/revoked")
+                release.set()
+                pump(app, lambda: "분석 취소" in app.status_text.get()
+                     and app.start_button.instate(["!disabled"]),
+                     "revoked in-flight GitHub audit")
+            assert not revoked_output.exists(), "old ref must never save after revocation"
+
+            # Local A/B/C may finish after the approved output changes. The
+            # worker must throw away its result rather than publish to old out.
+            local_entered, local_release = Event(), Event()
+            local_out = base / "revoked-local-output"
+            app.mode.set("local")
+            app.paths["repo"].set(str(small))
+            app.paths["requirements"].set(str(small_req))
+            app.paths["out"].set(str(local_out))
+            from reqea.core.orchestrator import build_audit as original_build
+            def blocked_build(*args, **kwargs):
+                local_entered.set()
+                assert local_release.wait(timeout=12), "local analysis gate never released"
+                return original_build(*args, **kwargs)
+            with patch("reqea.gui.app.build_audit", side_effect=blocked_build):
+                app.start_audit()
+                assert local_entered.wait(timeout=12)
+                app.paths["out"].set(str(base / "new-selected-output"))
+                local_release.set()
+                pump(app, lambda: "분석 취소" in app.status_text.get()
+                     and app.start_button.instate(["!disabled"]),
+                     "revoked in-flight local analysis")
+            assert not local_out.exists(), "old local audit must not save after output switch"
+            assert not (base / "new-selected-output").exists()
+            print("GUI in-flight public GitHub/local audit consent cancellation: "
+                  "synthetic PASS; actual Windows 11 NOT_RUN")
             print("V1.1 registered project, opt-in watch, local-only delta and "
                   "public-GitHub GUI source route: synthetic PASS; live network NOT_RUN")
 
