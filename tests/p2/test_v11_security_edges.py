@@ -99,6 +99,44 @@ class V11SecurityBoundaryTests(unittest.TestCase):
                 load_deltas(out_dir=str(out))
             self.assertEqual(record.read_bytes(), tampered)
 
+    def test_hash_consistent_forged_history_is_rejected_on_read(self):
+        # An attacker can compute a correct SHA256 filename for arbitrary JSON.
+        # Such a file is NOT trustworthy candidate history just because its
+        # bytes and name agree. The GUI must never display its raw fields.
+        import hashlib
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "root"
+            root.mkdir()
+            canonical = compare_audits(_audit("UNASSESSED"),
+                                       _audit("CODE_CANDIDATE"),
+                                       before_snapshot="a" * 64,
+                                       after_snapshot="b" * 64)
+            written = save_delta(canonical, out_dir=str(Path(d) / "approved"),
+                                 source_root=str(root))
+            record = json.loads(Path(written["file"]).read_text(encoding="utf-8"))
+            self.assertEqual(len(load_deltas(out_dir=str(Path(d) / "approved"))), 1)
+            variants = {
+                "forged_verified": dict(record, verification_status="VERIFIED"),
+                "raw_source_field": dict(record, raw_source="PRIVATE_SOURCE"),
+                "unsafe_warnings": dict(record, warnings=["PRIVATE_PATH"]),
+                "extra_evidence": dict(record, evidence=[{"path": "secret"}]),
+                "unhashable_status": dict(record, changes=[dict(record["changes"][0],
+                                                               before=["VERIFIED"])]),
+                "duplicate_req": dict(record, changes=[record["changes"][0],
+                                                        record["changes"][0]]),
+            }
+            for label, forged in variants.items():
+                with self.subTest(variant=label):
+                    out = Path(d) / label
+                    folder = out / "reqea-history"
+                    folder.mkdir(parents=True)
+                    encoded = (json.dumps(forged, ensure_ascii=False, sort_keys=True,
+                                          separators=(",", ":")) + "\n").encode("utf-8")
+                    sha = hashlib.sha256(encoded).hexdigest()
+                    (folder / f"reqea-delta-{sha}.json").write_bytes(encoded)
+                    with self.assertRaises(ValueError):
+                        load_deltas(out_dir=str(out))
+
     def test_symlinked_history_folder_never_writes_outside_approved_destination(self):
         with tempfile.TemporaryDirectory() as d:
             base=Path(d)

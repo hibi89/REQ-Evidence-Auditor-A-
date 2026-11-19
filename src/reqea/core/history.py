@@ -212,11 +212,19 @@ def _append_json(out_dir: str, subdir: str, prefix: str, payload: dict,
         pending.unlink(missing_ok=True)
 
 
-def save_delta(delta: dict, *, out_dir: str, source_root: str | None = None) -> dict:
+def _safe_delta_record(delta: dict) -> dict:
+    """Canonical candidate-only history contract for BOTH write and read.
+
+    A SHA256 filename verifies integrity against its own bytes, not the
+    authority of an untrusted file. Reject a self-consistent forged status,
+    raw evidence text, or extra fields before returning data to the GUI.
+    """
     if (not isinstance(delta, dict) or delta.get("schema_version") != "reqea.delta.v11"
             or delta.get("verification_status") != "NOT_RUN"
             or not isinstance(delta.get("changes"), list)):
         raise ValueError("invalid candidate delta")
+    if len(delta["changes"]) > _MAX_REQS:
+        raise ValueError("candidate delta exceeds bounded REQ scope")
     # Reconstruct only permitted fields to avoid persisting caller-provided code,
     # paths or arbitrary warning contents.
     old, new = delta.get("before", {}), delta.get("after", {})
@@ -249,7 +257,9 @@ def save_delta(delta: dict, *, out_dir: str, source_root: str | None = None) -> 
         req, old_status, new_status = entry.get("req_id"), entry.get("before"), entry.get("after")
         if not isinstance(req, str) or not _REQ.fullmatch(req):
             raise ValueError("invalid delta REQ")
-        if old_status not in _STATES | {"NOT_PRESENT"} or new_status not in _STATES | {"NOT_PRESENT"}:
+        if (not isinstance(old_status, str) or not isinstance(new_status, str)
+                or old_status not in _STATES | {"NOT_PRESENT"}
+                or new_status not in _STATES | {"NOT_PRESENT"}):
             raise ValueError("invalid delta status")
         record = {"req_id": req, "before": old_status, "after": new_status}
         for key in ("before_evidence_count", "after_evidence_count",
@@ -264,9 +274,13 @@ def save_delta(delta: dict, *, out_dir: str, source_root: str | None = None) -> 
     safe["changes"].sort(key=lambda r: r["req_id"])
     safe["changed_count"] = len(safe["changes"])
     safe["warnings"] = ["STATIC_CANDIDATES_ARE_NOT_VERIFIED"]
+    return safe
+
+
+def save_delta(delta: dict, *, out_dir: str, source_root: str | None = None) -> dict:
+    safe = _safe_delta_record(delta)
     return _append_json(out_dir, "reqea-history", "reqea-delta-", safe,
                         source_root=source_root)
-
 
 def _validated_profile(profile: dict) -> dict:
     if not isinstance(profile, dict):
@@ -349,6 +363,11 @@ def load_deltas(*, out_dir: str) -> list[dict]:
         item = json.loads(raw.decode("utf-8"))
         if not isinstance(item, dict) or item.get("schema_version") != "reqea.delta.v11":
             raise ValueError("invalid local history schema")
+        # Hash-addressing alone cannot authenticate fields. Even if an
+        # attacker recomputed a filename, the GUI must never show a forged
+        # VERIFIED state, extra raw-source field, or untrusted warning.
+        if _safe_delta_record(item) != item:
+            raise ValueError("noncanonical local history candidate record")
         records.append(item)
     return records
 
