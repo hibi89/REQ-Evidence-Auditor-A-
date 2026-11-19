@@ -567,6 +567,82 @@ class ChangeWatchSynthetic(unittest.TestCase):
             watcher.stop()
             self.assertIsNone(watcher.seconds_until_due(now=100000))
 
+    def test_slow_successful_remote_poll_waits_15m_after_response(self):
+        from reqea.core import watch as module
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "remote"
+            _project(root)
+
+            @contextmanager
+            def snapshot(url, ref, *, before_request=None):
+                yield {"root": str(root), "owner": "o", "repository": "r",
+                       "commit_sha": "a" * 40, "source_sha": "UNVERIFIED"}
+
+            watcher = PublicGitHubChangeWatch("https://github.com/o/r", "main",
+                                               "requirements.md")
+            with patch("reqea.core.watch.public_github_snapshot", side_effect=snapshot):
+                self.assertEqual(watcher.start(now=0)["status"], "STARTED")
+
+            with patch.object(watcher.reader, "head_commit_sha", return_value="a" * 40) as poll:
+                # Emulate a successful GET completing 420 seconds after start.
+                with patch.object(module, "_poll_time", side_effect=[1000.0, 1420.0]):
+                    self.assertEqual(watcher.tick()["status"], "UNCHANGED")
+                self.assertEqual(watcher.seconds_until_due(now=2319), 1)
+                self.assertEqual(watcher.tick(now=1800)["status"], "WAIT")
+                poll.assert_called_once()
+                self.assertEqual(watcher.tick(now=2320)["status"], "UNCHANGED")
+                self.assertEqual(poll.call_count, 2)
+
+    def test_slow_changed_remote_snapshot_waits_15m_after_analysis(self):
+        from reqea.core import watch as module
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "remote"
+            _project(root)
+
+            @contextmanager
+            def snapshot(url, ref, *, before_request=None):
+                yield {"root": str(root), "owner": "o", "repository": "r",
+                       "commit_sha": "b" * 40 if ref == "b" * 40 else "a" * 40,
+                       "source_sha": "UNVERIFIED"}
+
+            watcher = PublicGitHubChangeWatch("https://github.com/o/r", "main",
+                                               "requirements.md")
+            with patch("reqea.core.watch.public_github_snapshot", side_effect=snapshot):
+                watcher.start(now=0)
+                (root / "src" / "app.py").write_text("def f(): return 2\n", encoding="utf-8")
+                with patch.object(watcher.reader, "head_commit_sha",
+                                  return_value="b" * 40) as poll:
+                    with patch.object(module, "_poll_time", side_effect=[1000.0, 1700.0]):
+                        outcome = watcher.tick()
+                    self.assertEqual(outcome["status"], "CHANGED")
+                    self.assertEqual(outcome["pinned_commit_sha"], "b" * 40)
+                    self.assertEqual(watcher.seconds_until_due(now=2599), 1)
+                    self.assertEqual(watcher.tick(now=2500)["status"], "WAIT")
+                    poll.assert_called_once()
+                    self.assertEqual(watcher.tick(now=2600)["status"], "UNCHANGED")
+                    self.assertEqual(poll.call_count, 2)
+
+    def test_slow_local_fingerprint_restarts_30s_interval_after_completion(self):
+        from reqea.core import watch as module
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "local"
+            req = _project(root)
+            watcher = LocalChangeWatch(str(root), str(req))
+            self.assertEqual(watcher.start(now=0)["status"], "STARTED")
+            with patch.object(module, "_poll_time", side_effect=[100.0, 170.0]):
+                self.assertEqual(watcher.tick()["status"], "UNCHANGED")
+            self.assertEqual(watcher.seconds_until_due(now=199), 1)
+            self.assertEqual(watcher.tick(now=199)["status"], "WAIT")
+            self.assertEqual(watcher.tick(now=200)["status"], "UNCHANGED")
+
+            (root / "src" / "app.py").write_text("def f(): return 3\n", encoding="utf-8")
+            with patch.object(module, "_poll_time", side_effect=[230.0, 275.0]):
+                self.assertEqual(watcher.tick()["status"], "DEBOUNCING")
+            self.assertEqual(watcher.seconds_until_due(now=304), 1)
+            self.assertEqual(watcher.tick(now=304)["status"], "WAIT")
+            self.assertEqual(watcher.tick(now=305)["status"], "CHANGED")
+            self.assertTrue(watcher.active)
+
     def test_real_clock_rate_limit_wait_begins_after_response(self):
         from reqea.core.github_source import GitHubRateLimitError
         from reqea.core import watch as module

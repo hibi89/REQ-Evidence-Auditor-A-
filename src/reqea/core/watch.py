@@ -188,6 +188,9 @@ class LocalChangeWatch:
                 with self._state_lock:
                     if not self.active or generation != self._generation:
                         return {"status": "STOPPED"}
+                    # Foreground scan may be slow. Start the next minimum
+                    # interval from completion, never from scan start.
+                    self._checked_at = _poll_time(None) if now is None else moment
                     self._pending = None
                 return {"status": "UNCHANGED"}
             source = inspect_local_source(self.root, requirements)
@@ -198,12 +201,15 @@ class LocalChangeWatch:
                 with self._state_lock:
                     if not self.active or generation != self._generation:
                         return {"status": "STOPPED"}
-                    self._pending = (fingerprint, moment)
+                    finished = _poll_time(None) if now is None else moment
+                    self._checked_at = finished
+                    self._pending = (fingerprint, finished)
                 return {"status": "DEBOUNCING"}
             if moment - pending[1] < self.debounce:
                 with self._state_lock:
                     if not self.active or generation != self._generation:
                         return {"status": "STOPPED"}
+                    self._checked_at = _poll_time(None) if now is None else moment
                 return {"status": "DEBOUNCING"}
             new_audit = build_audit(self.root, requirements)
             if _FATAL.intersection(new_audit.get("warnings", [])):
@@ -220,6 +226,7 @@ class LocalChangeWatch:
                 self._audit = new_audit
                 self._fingerprint = fingerprint
                 self._pending = None
+                self._checked_at = _poll_time(None) if now is None else moment
                 return {"status": "CHANGED", "previous": previous, "current": new_audit,
                         "fingerprint": fingerprint,
                         "source_sha": new_audit.get("source_sha", "UNVERIFIED"),
@@ -347,6 +354,9 @@ class PublicGitHubChangeWatch:
                 with self._state_lock:
                     if not self.active or generation != self._generation:
                         return {"status": "STOPPED"}
+                    # HTTP completion, not request start, anchors the
+                    # minimum 15-minute delay for the next public GET.
+                    self._checked_at = _poll_time(None) if now is None else moment
                     self._backoff = self.interval
                 return {"status": "UNCHANGED"}
             # Pin the observed commit: moving the branch during transfer is safe.
@@ -364,6 +374,7 @@ class PublicGitHubChangeWatch:
                 old_audit = self._audit
                 self._audit = audit
                 self._head = head
+                self._checked_at = _poll_time(None) if now is None else moment
                 self._backoff = self.interval
                 return {"status": "CHANGED", "previous": old_audit, "current": audit,
                         "pinned_commit_sha": head, "source_sha": "UNVERIFIED",
