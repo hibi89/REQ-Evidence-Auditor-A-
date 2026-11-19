@@ -239,7 +239,7 @@ class CallerToCalleeSourceAudit(unittest.TestCase):
             base = Path(d)
             root = base / "registered-root"
             root.mkdir()
-            _make(root)
+            _make(root, second=True)
             out = base / "approved-output"
             profile = {"kind": "local", "source": str(root),
                        "requirements": None, "ref": None}
@@ -253,6 +253,9 @@ class CallerToCalleeSourceAudit(unittest.TestCase):
                 profile_choice=Var(label), document_choice=Var("docs/FINAL_BLUEPRINT.md"),
                 _profiles=profiles, _profile_labels=[label],
                 local_discovery=discover_local_requirements(str(root)),
+                _accepted_registered_local=None, _accepted_registered_remote=None,
+                _accepted_remote=None, _audit_cancel_event=None,
+                _watch_input_scope=None, _discovering=False, _closing=False,
                 status_text=Var("")
             )
             fake._source = lambda: AuditorApp._source(fake)
@@ -262,6 +265,16 @@ class CallerToCalleeSourceAudit(unittest.TestCase):
             self.assertIn("로컬 정본 선택:", fake.status_text.get())
             self.assertEqual(Path(bookmark["file"]).read_bytes(), original)
             self.assertIsNone(load_projects(out_dir=str(out))[0]["requirements"])
+            fake.paths["requirements"].set(str(root / "docs" / "FINAL_BLUEPRINT_V11.md"))
+            AuditorApp._on_watch_input_changed(fake)
+            self.assertIsNone(fake._source()["requirements"],
+                              "typing an alternative discovered local path is not acceptance")
+            fake.paths["requirements"].set(str(root / "docs" / "FINAL_BLUEPRINT.md"))
+            AuditorApp._on_watch_input_changed(fake)
+            self.assertIsNone(fake._source()["requirements"],
+                              "returning to the original path cannot resurrect approval")
+            AuditorApp.accept_discovered_document(fake)
+            self.assertEqual(fake._source()["requirements"], "docs/FINAL_BLUEPRINT.md")
 
             # Changing the selected REQ document after discovery must fail
             # closed. Stale GUI candidates must not authorize changed bytes.

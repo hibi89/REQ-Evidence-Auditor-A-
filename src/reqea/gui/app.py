@@ -41,6 +41,7 @@ class AuditorApp(tk.Tk):
         self.events: queue.Queue[tuple[str, int, object]] = queue.Queue()
         self.local_discovery: dict | None = None
         self.remote_discovery: dict | None = None
+        self._accepted_registered_local: tuple | None = None
         # Explicit selection of a discovered remote canonical document,
         # bound to the saved bookmark/output and the exact discovered SHA.
         # It never changes the immutable registered bookmark.
@@ -182,6 +183,7 @@ class AuditorApp(tk.Tk):
         self._discovery_cancel_event = None
         self._discovery_input_scope = None
         self.remote_discovery = None
+        self._accepted_registered_local = None
         self._accepted_registered_remote = None
         self._accepted_remote = None
         self.document_choice.set("")
@@ -196,6 +198,17 @@ class AuditorApp(tk.Tk):
         # Audit, discovery and watch have independent cancellation authorities.
         # If any candidate selection or its binding changes, returning to an
         # earlier combobox value must NOT silently restore previous consent.
+        # A registered local bookmark also needs explicit in-session
+        # canonical acceptance; editing its text field cannot authorize
+        # a different discovered requirement without pressing Select.
+        local_approval = getattr(self, "_accepted_registered_local", None)
+        if local_approval is not None and (
+                self.mode.get() != "registered"
+                or self.profile_choice.get() != local_approval[0]
+                or self.paths["out"].get().strip() != local_approval[1]
+                or self.paths["requirements"].get().strip() != local_approval[3]
+                or self.document_choice.get().strip() != local_approval[4]):
+            self._accepted_registered_local = None
         # A registered remote bookmark with no saved canonical document
         # grants in-session approval only for the CURRENT picker/output scope.
         # Without revocation, selecting a different candidate and returning
@@ -239,6 +252,7 @@ class AuditorApp(tk.Tk):
         self._generation += 1
         self.local_discovery = None
         self.remote_discovery = None
+        self._accepted_registered_local = None
         self._accepted_registered_remote = None
         self._accepted_remote = None
         self.document_choice.set("")
@@ -273,7 +287,12 @@ class AuditorApp(tk.Tk):
                     except ValueError as exc:
                         raise ValueError("selected requirements outside registered root") from exc
                     resolved = select_requirements(found, relative)
-                    result["requirements"] = resolved["relative_path"]
+                    approval = getattr(self, "_accepted_registered_local", None)
+                    if approval == (choice, self.paths["out"].get().strip(),
+                                    str(root), selected,
+                                    self.document_choice.get().strip(),
+                                    resolved["sha256"]):
+                        result["requirements"] = resolved["relative_path"]
             if result["kind"] == "github" and not result.get("requirements"):
                 state = getattr(self, "remote_discovery", None)
                 approval = getattr(self, "_accepted_registered_remote", None)
@@ -324,6 +343,7 @@ class AuditorApp(tk.Tk):
         gen = self._generation
         self.local_discovery = None
         self.remote_discovery = None
+        self._accepted_registered_local = None
         self._accepted_registered_remote = None
         self._accepted_remote = None
         self.document_choice.set("")
@@ -401,6 +421,14 @@ class AuditorApp(tk.Tk):
                 self.status_text.set("정본 선택 차단 · 후보/경로/변경 사항 확인")
                 return
             self.paths["requirements"].set(selected["requirements_path"])
+            if self.mode.get() == "registered" and not target.get("requirements"):
+                # Set consent AFTER the Tk variable callback; any later
+                # document, source bookmark or output edit revokes it.
+                self._accepted_registered_local = (
+                    self.profile_choice.get(), self.paths["out"].get().strip(),
+                    str(Path(target["source"]).absolute()),
+                    selected["requirements_path"], selected["relative_path"],
+                    selected["sha256"])
             self.status_text.set(f"로컬 정본 선택: {selected['relative_path']} (NOT VERIFIED)")
             return
         if (not self.remote_discovery or
