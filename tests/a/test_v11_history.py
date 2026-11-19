@@ -136,6 +136,8 @@ class DeltaHistory(unittest.TestCase):
     def test_cli_compare_existing_v1_output(self):
         with tempfile.TemporaryDirectory() as d:
             base=Path(d)
+            source=base/"source"
+            source.mkdir()
             out=base/"out"
             out.mkdir()
             prior=base/"prior.json"; current=base/"current.json"
@@ -145,16 +147,16 @@ class DeltaHistory(unittest.TestCase):
             stdout=io.StringIO()
             with contextlib.redirect_stdout(stdout):
                 rc=main(["compare","--before",str(prior),"--after",str(current),
-                         "--source-root",str(base),"--out",str(out)])
+                         "--source-root",str(source),"--out",str(out)])
             self.assertEqual(rc,0)
             summary=json.loads(stdout.getvalue())
             self.assertEqual(summary["status"],"CANDIDATE_DIFF_ONLY")
             self.assertEqual(summary["changed_count"],1)
             self.assertEqual(summary["verification_status"],"NOT_RUN")
             denied = main(["compare", "--before", str(prior), "--after", str(current),
-                           "--source-root", str(base), "--out", str(base / "unsafe")])
+                           "--source-root", str(source), "--out", str(source / "unsafe")])
             self.assertEqual(denied, 2)
-            self.assertFalse((base / "unsafe").exists())
+            self.assertFalse((source / "unsafe").exists())
 
 
 
