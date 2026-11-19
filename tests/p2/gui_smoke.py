@@ -227,6 +227,45 @@ with tempfile.TemporaryDirectory() as d:
                 assert pending_remote.start(now=0)["status"] == "STOPPED"
                 assert not pending_remote.active
             app.remote_ref.set("main")
+            # Change selected ref before a queued discovery starts: no GET.
+            with patch("reqea.gui.app.threading.Thread.start") as queued:
+                app.discover_documents()
+                assert app._discovering and app._discovery_cancel_event is not None
+                first_gen = app._generation
+                first_cancel = app._discovery_cancel_event
+                old_target = app._source()
+                queued.assert_called_once()
+                app.remote_ref.set("feature/new-branch")
+                assert first_cancel.is_set() and not app._discovering
+                assert app.discover_button.instate(["!disabled"])
+                assert app._discovery_input_scope is None
+                assert app.remote_discovery is None
+                with patch("reqea.gui.app.public_github_snapshot") as forbidden:
+                    app._discover_remote(first_gen, old_target, first_cancel)
+                    forbidden.assert_not_called()
+                app.poll()
+                assert app.remote_discovery is None
+            # Change ref during in-flight GET: no follow-up GET/stale result.
+            with patch("reqea.gui.app.threading.Thread.start") as queued:
+                app.discover_documents()
+                second_gen = app._generation
+                second_cancel = app._discovery_cancel_event
+                second_target = app._source()
+                queued.assert_called_once()
+            @contextmanager
+            def interrupted(url, ref, *, before_request=None):
+                assert ref == "feature/new-branch"
+                before_request()
+                app.remote_ref.set("feature/changed-again")
+                before_request()
+                yield {"root": str(small), "commit_sha": "a" * 40}
+            with patch("reqea.gui.app.public_github_snapshot", side_effect=interrupted):
+                app._discover_remote(second_gen, second_target, second_cancel)
+            app.poll()
+            assert second_cancel.is_set() and not app._discovering
+            assert app.remote_discovery is None
+            assert app.candidate_picker.cget("values") == ()
+            assert app.discover_button.instate(["!disabled"])
             print("V1.1 registered project, opt-in watch, local-only delta and "
                   "public-GitHub GUI source route: synthetic PASS; live network NOT_RUN")
 

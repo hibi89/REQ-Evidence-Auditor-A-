@@ -47,6 +47,8 @@ class AuditorApp(tk.Tk):
         self._profiles: list[dict] = []
         self._generation = 0
         self._discovering = False
+        self._discovery_cancel_event: threading.Event | None = None
+        self._discovery_input_scope: tuple[str, ...] | None = None
         self._watch_generation = 0
         self._watch_busy = False
         self._watcher: LocalChangeWatch | PublicGitHubChangeWatch | None = None
@@ -144,15 +146,44 @@ class AuditorApp(tk.Tk):
             return (mode, self.profile_choice.get(), output)
         return (mode, output)
 
+    def _discovery_scope_inputs(self) -> tuple[str, ...]:
+        """Only inputs that determine the pending local/public source."""
+        mode = self.mode.get()
+        if mode == "github":
+            return (mode, self.remote_url.get().strip(), self.remote_ref.get().strip())
+        if mode == "registered":
+            return (mode, self.profile_choice.get())
+        return (mode, self.paths["repo"].get().strip())
+
+    def _cancel_pending_discovery(self) -> None:
+        """Revoke consent and drop stale discovery UI before another selection."""
+        cancelled = self._discovery_cancel_event
+        if cancelled is not None:
+            cancelled.set()
+        self._generation += 1
+        self._discovering = False
+        self._discovery_cancel_event = None
+        self._discovery_input_scope = None
+        self.remote_discovery = None
+        self.document_choice.set("")
+        self.candidate_picker.configure(values=[])
+        self.discover_button.state(["!disabled"])
+        if not self._closing:
+            self.status_text.set(
+                "설계도 탐색 취소 · GitHub URL/ref/선택 프로젝트 변경 · 다시 탐색 필요")
+
     def _on_watch_input_changed(self, *_args: str) -> None:
-        # Trace callbacks run at the moment a Tk selection changes, before
-        # the next timer/event. Explicit STOP cancels queued and in-flight GETs.
+        # Every Tk edit is checked synchronously before the next GUI timer.
+        # Discovery and watch have independent cancellation generations.
         scope = self._watch_input_scope
         if scope is not None and self._watch_scope_inputs() != scope:
             self.stop_watch()
             if not self._closing:
                 self.status_text.set(
                     "감시 중지 · 선택 소스/정본/결과 폴더 변경됨 · 재시작 시 명시적 승인 필요")
+        if (self._discovering and self._discovery_input_scope is not None
+                and self._discovery_scope_inputs() != self._discovery_input_scope):
+            self._cancel_pending_discovery()
 
     def mode_changed(self) -> None:
         if self._watcher is not None or self._watch_busy:
@@ -219,15 +250,26 @@ class AuditorApp(tk.Tk):
             self._show_candidates(discovered)
             return
         self._discovering = True
+        cancel = threading.Event()
+        self._discovery_cancel_event = cancel
+        self._discovery_input_scope = self._discovery_scope_inputs()
         self.discover_button.state(["disabled"])
         self.status_text.set("선택한 공개 GitHub 저장소에서 읽기 전용 설계도 탐색 중...")
-        threading.Thread(target=self._discover_remote, args=(gen, target),
+        threading.Thread(target=self._discover_remote, args=(gen, target, cancel),
                          daemon=True).start()
 
-    def _discover_remote(self, gen: int, target: dict) -> None:
+    def _discover_remote(self, gen: int, target: dict,
+                         cancel: threading.Event) -> None:
+        def ensure_active() -> None:
+            if cancel.is_set():
+                raise ValueError("public GitHub discovery cancelled")
         try:
-            with public_github_snapshot(target["source"], target.get("ref")) as snap:
+            ensure_active()  # No GET if a queued worker was already cancelled.
+            with public_github_snapshot(target["source"], target.get("ref"),
+                                        before_request=ensure_active) as snap:
+                ensure_active()
                 found = discover_local_requirements(snap["root"])
+                ensure_active()
                 result = {
                     "url": target["source"], "ref": target.get("ref"),
                     "commit_sha": snap["commit_sha"],
@@ -236,7 +278,8 @@ class AuditorApp(tk.Tk):
                 }
             self.events.put(("discovery", gen, result))
         except (ValueError, OSError, UnicodeError, TypeError, KeyError) as exc:
-            self.events.put(("discovery", gen, {"error": type(exc).__name__}))
+            if not cancel.is_set():
+                self.events.put(("discovery", gen, {"error": type(exc).__name__}))
 
     def _show_candidates(self, found: dict) -> None:
         candidates = [c["path"] for c in found.get("candidates", [])]
@@ -530,6 +573,8 @@ class AuditorApp(tk.Tk):
                 if gen != self._generation:
                     continue
                 self._discovering = False
+                self._discovery_cancel_event = None
+                self._discovery_input_scope = None
                 self.discover_button.state(["!disabled"])
                 if isinstance(payload, dict) and "error" not in payload:
                     self.remote_discovery = payload
@@ -572,6 +617,8 @@ class AuditorApp(tk.Tk):
 
     def _on_close(self) -> None:
         self._closing = True
+        if self._discovering:
+            self._cancel_pending_discovery()
         self.stop_watch()
         self.destroy()
 
