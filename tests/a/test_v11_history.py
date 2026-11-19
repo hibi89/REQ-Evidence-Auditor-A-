@@ -133,6 +133,46 @@ class DeltaHistory(unittest.TestCase):
             self.assertEqual(load_projects(out_dir=str(out)), [])
             self.assertEqual(len(load_deltas(out_dir=str(out))), 1)
 
+    def test_cli_project_registration_listing_selection_and_explicit_forget(self):
+        with tempfile.TemporaryDirectory() as d:
+            import contextlib, io
+            base=Path(d)
+            root=base/"sample"
+            root.mkdir()
+            (root/"src").mkdir()
+            (root/"src"/"app.py").write_text("def f(): return 1\n", encoding="utf-8")
+            (root/"requirements.md").write_text(
+                "# REQ-001 CLI saved\nReference src/app.py\n"
+                "Acceptance criteria:\n- static only\n", encoding="utf-8")
+            out=base/"approved"
+            def execute(*parts):
+                stdout=io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    rc=main(list(parts))
+                return rc,json.loads(stdout.getvalue())
+            rc,created=execute("projects","--out",str(out),
+                               "--add-repo",str(root),"--requirements","requirements.md")
+            self.assertEqual(rc,0)
+            ident=created["id"]
+            self.assertEqual(len(ident),64)
+            rc,listing=execute("projects","--out",str(out))
+            self.assertEqual(rc,0)
+            self.assertEqual(listing["projects"],[{"id":ident,"kind":"local"}])
+            self.assertNotIn(str(root),json.dumps(listing))
+            rc,found=execute("discover","--registered",ident,"--out",str(out))
+            self.assertEqual(rc,0)
+            self.assertEqual(found["status"],"SINGLE_CANDIDATE")
+            rc,report=execute("audit-source","--registered",ident,"--out",str(out))
+            self.assertEqual(rc,0,report)
+            self.assertEqual(json.loads((out/"audit.json").read_text(encoding="utf-8"))["schema_version"],
+                             "reqea.v1")
+            rc,removed=execute("projects","--out",str(out),"--forget",ident)
+            self.assertEqual(rc,0)
+            self.assertEqual(removed["status"],"FORGOTTEN")
+            self.assertEqual((root/"src"/"app.py").read_text(encoding="utf-8"),
+                             "def f(): return 1\n")
+            self.assertTrue((out/"manifest.json").exists())
+
     def test_cli_compare_existing_v1_output(self):
         with tempfile.TemporaryDirectory() as d:
             base=Path(d)

@@ -332,3 +332,10 @@ def unregister_project(profile: dict, *, out_dir: str) -> bool:
         raise ValueError("registered project record has changed; refuse deletion")
     path.unlink()
     return True
+
+
+def project_id(profile: dict) -> str:
+    """Stable SHA256 bookmark identifier without exposing a user path/URL."""
+    safe = _validated_profile(profile)
+    raw = (json.dumps(safe, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()

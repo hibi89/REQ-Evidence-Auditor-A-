@@ -10,7 +10,8 @@ from .core.discovery import discover_local_requirements
 from .core.selector import select_requirements
 from contextlib import nullcontext
 from .core.snapshot import public_github_snapshot
-from .core.history import compare_audits, save_delta
+from .core.history import (compare_audits, save_delta, load_projects, register_project,
+                           unregister_project, project_id)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -27,12 +28,15 @@ def main(argv: list[str] | None = None) -> int:
     source.add_argument("--repo", help="Explicit local repository root")
     source.add_argument("--github-url", help="Public https://github.com/OWNER/REPO")
     discover_cmd.add_argument("--ref", help="GitHub branch, tag or exact commit (not for local)")
+    source.add_argument("--registered", help="Stable 64-hex saved project ID")
+    discover_cmd.add_argument("--out", help="Approved project registry output folder (required if registered)")
 
     source_audit = commands.add_parser(
         "audit-source", help="Audit a selected local or pinned public GitHub snapshot")
     source_input = source_audit.add_mutually_exclusive_group(required=True)
     source_input.add_argument("--repo", help="Explicit approved local root")
     source_input.add_argument("--github-url", help="Approved public GitHub URL")
+    source_input.add_argument("--registered", help="Stable 64-hex saved project ID")
     source_audit.add_argument("--ref", help="GitHub ref (not valid with --repo)")
     source_audit.add_argument("--requirements", help="Root-relative discovered document; mandatory if ambiguous")
     source_audit.add_argument("--out", required=True, help="Approved local output folder outside the source")
@@ -45,8 +49,62 @@ def main(argv: list[str] | None = None) -> int:
     compare.add_argument("--out", required=True, help="Approved local output folder")
     compare.add_argument("--source-root", required=True, help="Audited source root; history output must be outside")
 
+    profiles_cmd = commands.add_parser("projects", help="List/add/forget approved local project bookmarks")
+    profiles_cmd.add_argument("--out", required=True, help="User-approved project registry folder")
+    profile_action = profiles_cmd.add_mutually_exclusive_group()
+    profile_action.add_argument("--add-repo", help="Register explicit local root")
+    profile_action.add_argument("--add-github-url", help="Register explicit public GitHub URL")
+    profile_action.add_argument("--forget", help="Forget the exact registered 64-hex project ID")
+    profiles_cmd.add_argument("--ref", help="Selected GitHub branch/tag/commit")
+    profiles_cmd.add_argument("--requirements", help="Optional root-relative canonical document")
+
     args = parser.parse_args(argv)
     try:
+        if args.command == "projects":
+            if args.add_repo or args.add_github_url:
+                if args.add_repo and args.ref is not None:
+                    raise ValueError("--ref valid only with --add-github-url")
+                profile = {"kind": "local" if args.add_repo else "github",
+                           "source": args.add_repo or args.add_github_url,
+                           "ref": args.ref if args.add_github_url else None,
+                           "requirements": args.requirements}
+                saved = register_project(profile, out_dir=args.out)
+                print(json.dumps({"status": saved["status"], "id": project_id(profile),
+                                  "verification_status": "NOT_RUN"}, ensure_ascii=False))
+                return 0
+            if args.ref is not None or args.requirements is not None:
+                raise ValueError("--ref and --requirements require a registration operation")
+            profiles = load_projects(out_dir=args.out)
+            if args.forget:
+                matches = [profile for profile in profiles if project_id(profile) == args.forget]
+                if len(matches) != 1:
+                    raise ValueError("registered project identifier not found")
+                forgotten = unregister_project(matches[0], out_dir=args.out)
+                print(json.dumps({"status": "FORGOTTEN" if forgotten else "NOT_FOUND",
+                                  "verification_status": "NOT_RUN"}))
+                return 0 if forgotten else 2
+            print(json.dumps({"status": "LISTED", "projects":
+                              [{"id": project_id(p), "kind": p["kind"]} for p in profiles],
+                              "verification_status": "NOT_RUN"}, ensure_ascii=False))
+            return 0
+        if args.command in ("discover", "audit-source") and args.registered:
+            if args.ref is not None:
+                raise ValueError("registered ref is stored with the approved profile")
+            if not args.out:
+                raise ValueError("registered source requires approved output registry")
+            if not isinstance(args.registered, str) or len(args.registered) != 64 or any(
+                    c not in "0123456789abcdef" for c in args.registered):
+                raise ValueError("invalid project ID")
+            profiles = load_projects(out_dir=args.out)
+            matched = [p for p in profiles if project_id(p) == args.registered]
+            if len(matched) != 1:
+                raise ValueError("registered project not found")
+            profile = matched[0]
+            args.repo = profile["source"] if profile["kind"] == "local" else None
+            args.github_url = profile["source"] if profile["kind"] == "github" else None
+            args.ref = profile["ref"]
+            if args.command == "audit-source" and args.requirements is None:
+                args.requirements = profile["requirements"]
         if args.command == "compare":
             from pathlib import Path
             from .core.output import _check_no_symlinks
