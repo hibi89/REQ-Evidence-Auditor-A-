@@ -60,7 +60,9 @@ def main(argv: list[str] | None = None) -> int:
             stored = save_delta(delta, out_dir=args.out, source_root=args.source_root)
             print(json.dumps({"status": "CANDIDATE_DIFF_ONLY",
                               "changed_count": delta["changed_count"],
-                              "verification_status": "NOT_RUN", **stored},
+                              "verification_status": "NOT_RUN",
+                              "save_status": stored["status"],
+                              "file": stored["file"], "sha256": stored["sha256"]},
                              ensure_ascii=False))
             return 0
         if args.command == "audit-source":

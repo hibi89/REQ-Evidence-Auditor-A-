@@ -97,6 +97,26 @@ class DeltaHistory(unittest.TestCase):
                                   "ref": "main"}, out_dir=str(out))
             self.assertEqual(load_projects(out_dir=str(out)), records)
 
+    def test_reopen_saved_delta_and_explicit_bookmark_removal(self):
+        from reqea.core.history import load_deltas, unregister_project
+        with tempfile.TemporaryDirectory() as d:
+            base = Path(d)
+            root = base / "root"
+            root.mkdir()
+            out = base / "approved"
+            profile = {"kind": "local", "source": str(root), "requirements": "requirements.md"}
+            register_project(profile, out_dir=str(out))
+            delta = compare_audits(audit("GAP_CANDIDATE"), audit("UNASSESSED"),
+                                   before_snapshot="a"*64, after_snapshot="b"*64)
+            save_delta(delta, out_dir=str(out), source_root=str(root))
+            records = load_deltas(out_dir=str(out))
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0]["changed_count"], 1)
+            self.assertTrue(unregister_project(profile, out_dir=str(out)))
+            self.assertFalse(unregister_project(profile, out_dir=str(out)))
+            self.assertEqual(load_projects(out_dir=str(out)), [])
+            self.assertEqual(len(load_deltas(out_dir=str(out))), 1)
+
     def test_cli_compare_existing_v1_output(self):
         with tempfile.TemporaryDirectory() as d:
             base=Path(d)

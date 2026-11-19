@@ -99,6 +99,70 @@ with tempfile.TemporaryDirectory() as d:
             assert sorted(p.name for p in out.iterdir()) == [
                 "audit.json", "manifest.json", "owner-keep.txt", "report.html"
             ]
+            # V1.1: additional small root avoids the long-path limit fixture,
+            # and exercises the actual GUI caller -> registered project -> core.
+            small = base / "simple-v11-project"
+            (small / "src").mkdir(parents=True)
+            (small / "src" / "app.py").write_text("def run(): return 1\n", encoding="utf-8")
+            small_req = small / "requirements.md"
+            small_req.write_text(
+                "# REQ-001 - GUI extended\nReference src/app.py\n"
+                "Acceptance criteria:\n- static candidate only\n", encoding="utf-8")
+            v11out = base / "v11-output"
+            app.paths["repo"].set(str(small))
+            app.paths["requirements"].set(str(small_req))
+            app.paths["out"].set(str(v11out))
+            app.allow_overwrite.set(True)
+            app.mode.set("local")
+            app.register_selected_project()
+            assert app._profiles and app._profiles[0]["kind"] == "local", "GUI must persist local registration"
+            app.mode.set("registered")
+            app.start_audit()
+            pump(app, lambda: "저장:" in app.status_text.get()
+                 and app.start_button.instate(["!disabled"]), "registered project audit")
+            assert (v11out / "audit.json").is_file()
+            app.mode.set("local")
+            app.start_watch()
+            pump(app, lambda: app._watcher is not None and app._watcher.active,
+                 "explicit local watch startup")
+            watcher = app._watcher
+            prior_audit = {"schema_version": "reqea.v1", "source_sha": "UNVERIFIED",
+                           "verification_status": "NOT_RUN",
+                           "findings": [{"req_id": "REQ-001", "status": "UNASSESSED"}]}
+            current_audit = {"schema_version": "reqea.v1", "source_sha": "UNVERIFIED",
+                             "verification_status": "NOT_RUN",
+                             "findings": [{"req_id": "REQ-001", "status": "CODE_CANDIDATE"}]}
+            with patch.object(watcher, "tick", return_value={
+                     "status": "CHANGED", "previous": prior_audit, "current": current_audit,
+                     "fingerprint": "a" * 64}):
+                app._watch_tick_worker(app._watch_generation, watcher,
+                                       str(v11out), str(small), app._watch_token)
+            pump(app, lambda: "REQ 상태 변경 1개" in app.status_text.get(),
+                 "GUI watch change and saved history")
+            assert list((v11out / "reqea-history").glob("reqea-delta-*.json"))
+            app.stop_watch()
+            assert not watcher.active, "Stop must make subsequent polling inactive"
+            from contextlib import contextmanager
+
+            @contextmanager
+            def fake_snapshot(url, ref=None):
+                assert url == "https://github.com/example/example"
+                assert ref == "main"
+                yield {"root": str(small), "owner": "example",
+                       "repository": "example", "commit_sha": "a"*40,
+                       "source_sha": "UNVERIFIED", "tree_sha": "b"*40}
+            app.mode.set("github")
+            app.remote_url.set("https://github.com/example/example")
+            app.remote_ref.set("main")
+            app.document_choice.set("requirements.md")
+            with patch("reqea.gui.app.public_github_snapshot", side_effect=fake_snapshot):
+                app.start_audit()
+                pump(app, lambda: "저장:" in app.status_text.get()
+                     and app.start_button.instate(["!disabled"]), "GUI public GitHub source audit")
+            assert (v11out / "manifest.json").is_file()
+            print("V1.1 registered project, opt-in watch, local-only delta and "
+                  "public-GitHub GUI source route: synthetic PASS; live network NOT_RUN")
+
             print("GUI event-loop Unicode long-path, no-clobber, fail-closed output, "
                   "approved overwrite and source immutability: synthetic PASS; "
                   "Windows 11 actual UX NOT_RUN")

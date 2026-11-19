@@ -122,6 +122,8 @@ class AuditorApp(tk.Tk):
         self.after(1200, self._watch_cycle)
 
     def mode_changed(self) -> None:
+        if self._watcher is not None or self._watch_busy:
+            self.stop_watch()
         self._generation += 1
         self.local_discovery = None
         self.remote_discovery = None
@@ -293,7 +295,10 @@ class AuditorApp(tk.Tk):
         try:
             if target["kind"] == "local":
                 root = target["source"]
-                audit = build_audit(root, target["requirements"])
+                doc = Path(target["requirements"])
+                if not doc.is_absolute():
+                    doc = Path(root) / doc
+                audit = build_audit(root, str(doc))
                 self._render_and_save(audit, root, out, overwrite)
             else:
                 with public_github_snapshot(target["source"], pin or target.get("ref")) as snap:
