@@ -131,6 +131,44 @@ def _safe_output(out_dir: str, *, source_root: str | None = None) -> Path:
     return dest
 
 
+def _committed_records(folder: Path, prefix: str, limit: int) -> list[Path]:
+    """List committed SHA-named files without trusting abandoned staging files.
+
+    A killed writer may leave its private mkstemp file. Keep the file as crash
+    evidence, but never interpret it as a committed record or let it make
+    valid earlier records unreadable. Unknown/symlink entries still fail closed.
+    """
+    paths = sorted(folder.iterdir())
+    if len(paths) > limit + 64:
+        raise ValueError("approved history/registry directory exceeds bounded entry count")
+    records: list[Path] = []
+    pending_count = 0
+    for path in paths:
+        staged = re.fullmatch(r"\.reqea-pending-[a-z0-9_]{8}", path.name) is not None
+        if not staged and not re.fullmatch(
+                re.escape(prefix) + r"[0-9a-f]{64}\.json", path.name):
+            raise ValueError("unexpected history/registry entry")
+        try:
+            info = path.lstat()
+        except FileNotFoundError:
+            if staged:
+                # A concurrently successful writer removed its staging file.
+                continue
+            raise
+        bound = 4_096 if prefix == "reqea-profile-" else 512_000
+        if not stat.S_ISREG(info.st_mode) or info.st_size > bound:
+            raise ValueError("unsafe history/registry entry")
+        if staged:
+            pending_count += 1
+            if pending_count > 64:
+                raise ValueError("too many abandoned or active staging files")
+            continue
+        records.append(path)
+        if len(records) > limit:
+            raise ValueError("too many committed history/registry records")
+    return records
+
+
 def _append_json(out_dir: str, subdir: str, prefix: str, payload: dict,
                  *, source_root: str | None = None) -> dict:
     dest = _safe_output(out_dir, source_root=source_root)
@@ -144,7 +182,8 @@ def _append_json(out_dir: str, subdir: str, prefix: str, payload: dict,
     _check_no_symlinks(folder)
     target = folder / (prefix + digest + ".json")
     cap = 128 if subdir == "reqea-history" else _MAX_PROFILES
-    if not target.exists() and sum(1 for _ in folder.iterdir()) >= cap:
+    existing = _committed_records(folder, prefix, cap)
+    if not target.exists() and len(existing) >= cap:
         raise ValueError("approved output history/registry capacity reached; use another output folder")
     if target.exists():
         if target.is_symlink() or not target.is_file() or target.stat().st_size > 512_000:
@@ -270,9 +309,7 @@ def load_projects(*, out_dir: str) -> list[dict]:
         return []
     if not folder.is_dir():
         raise ValueError("project registry is not a directory")
-    paths = list(folder.iterdir())
-    if len(paths) > _MAX_PROFILES:
-        raise ValueError("too many saved projects for bounded loading")
+    paths = _committed_records(folder, "reqea-profile-", _MAX_PROFILES)
     records: list[dict] = []
     for p in sorted(paths):
         if not re.fullmatch(r"reqea-profile-[0-9a-f]{64}\.json", p.name):
@@ -298,9 +335,7 @@ def load_deltas(*, out_dir: str) -> list[dict]:
         return []
     if not folder.is_dir():
         raise ValueError("history output is not a directory")
-    paths = list(folder.iterdir())
-    if len(paths) > 128:
-        raise ValueError("too many local history records")
+    paths = _committed_records(folder, "reqea-delta-", 128)
     records: list[dict] = []
     for path in sorted(paths):
         if not re.fullmatch(r"reqea-delta-[0-9a-f]{64}\.json", path.name):
