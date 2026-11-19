@@ -103,6 +103,50 @@ class InterruptedHistoryRecovery(unittest.TestCase):
             self.assertEqual(Path(earlier["file"]).read_bytes(), earlier_bytes)
             self.assertTrue(staging[0].exists())
 
+    def test_four_competing_processes_preserve_distinct_commits_and_deduplicate(self):
+        """Real concurrent processes race on hardlink creation, not a mock lock."""
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            root = base / "source"
+            root.mkdir()
+            sentinel = root / "immutable.py"
+            sentinel.write_bytes(b"ORIGINAL")
+            out = base / "approved"
+            gate = base / "start"
+            one = compare_audits(_audit("UNASSESSED"), _audit("CODE_CANDIDATE"))
+            two = compare_audits(_audit("UNASSESSED"), _audit("GAP_CANDIDATE"))
+            worker = r"""
+import json, sys, time
+from pathlib import Path
+from reqea.core.history import save_delta
+args=json.loads(sys.argv[1])
+deadline=time.monotonic()+12
+while not Path(args["gate"]).exists():
+    if time.monotonic()>deadline:
+        sys.exit(10)
+    time.sleep(0.01)
+r=save_delta(args["delta"],out_dir=args["out"],source_root=args["root"])
+print(r["status"])
+"""
+            children = []
+            for delta in (one, one, two, two):
+                command = [sys.executable, "-c", worker, json.dumps({
+                    "delta": delta, "out": str(out), "root": str(root), "gate": str(gate),
+                })]
+                children.append(subprocess.Popen(command, stdout=subprocess.PIPE,
+                                                  stderr=subprocess.PIPE, text=True))
+            gate.write_text("GO", encoding="ascii")
+            for child in children:
+                stdout, stderr = child.communicate(timeout=20)
+                self.assertEqual(child.returncode, 0, stderr[:500])
+                self.assertIn(stdout.strip(), ("SAVED", "EXISTS"))
+            records = load_deltas(out_dir=str(out))
+            self.assertEqual(len(records), 2, "both distinct reports must commit only once")
+            self.assertEqual(sorted(r["changes"][0]["after"] for r in records),
+                             ["CODE_CANDIDATE", "GAP_CANDIDATE"])
+            self.assertEqual(sentinel.read_bytes(), b"ORIGINAL")
+            self.assertFalse(list((out / "reqea-history").glob(".reqea-pending-*")))
+
     def test_unknown_and_malicious_staging_names_still_fail_closed(self):
         with tempfile.TemporaryDirectory() as temp:
             out = Path(temp)

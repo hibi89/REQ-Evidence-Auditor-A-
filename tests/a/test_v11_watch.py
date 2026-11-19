@@ -161,6 +161,43 @@ class ChangeWatchSynthetic(unittest.TestCase):
             self.assertEqual(watcher._head,old)
             self.assertIs(watcher._audit,original_audit)
 
+    def test_48_hour_virtual_public_poll_does_not_exhaust_lifetime_request_budget(self):
+        """192 real code-path polls at 15min intervals, with mocked HTTP only."""
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "public"
+            _project(root)
+            head = "a" * 40
+            calls: list[str] = []
+            @contextmanager
+            def fake_snapshot(url, ref):
+                self.assertEqual(url, "https://github.com/o/r")
+                yield {"root": str(root), "owner": "o", "repository": "r",
+                       "commit_sha": head, "source_sha": "UNVERIFIED"}
+            def fake_api(path, *, cap=2_000_000):
+                calls.append(path)
+                if path.endswith("/o/r"):
+                    return {"private": False, "full_name": "o/r", "default_branch": "main"}
+                if path.endswith("/commits/main"):
+                    return {"sha": head}
+                raise AssertionError("unexpected GitHub poll URL")
+            watcher = PublicGitHubChangeWatch(
+                "https://github.com/o/r", "main", "requirements.md",
+                interval_seconds=900,
+            )
+            with patch("reqea.core.watch.public_github_snapshot", side_effect=fake_snapshot):
+                baseline = watcher.start(now=0)["audit"]
+            with patch("reqea.core.github_source._json_get", side_effect=fake_api):
+                for i in range(1, 193):  # 48h of simulated time, no wall-clock wait
+                    self.assertEqual(
+                        watcher.tick(now=900 * i)["status"], "UNCHANGED",
+                        f"public watch unexpectedly stopped at virtual poll {i}",
+                    )
+            self.assertEqual(len(calls), 384, "two bounded GETs per poll, no blob downloads")
+            self.assertTrue(watcher.active)
+            self.assertIs(watcher._audit, baseline)
+            self.assertEqual(watcher._head, head)
+            self.assertEqual(watcher.stop()["status"], "STOPPED")
+
     def test_remote_rate_limit_backs_off_then_stop(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d) / "public"

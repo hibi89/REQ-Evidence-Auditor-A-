@@ -118,6 +118,11 @@ class PublicGitHubReader:
 
     def head_commit_sha(self) -> str:
         """Lightweight explicit public-ref poll (no tree or blob downloads)."""
+        # This Reader persists for hours in PublicGitHubChangeWatch. The
+        # 128-call ceiling belongs to one operation, not to its entire life:
+        # otherwise harmless 15-minute polling pauses permanently after
+        # ~64 polls (~16 hours), even when all API calls succeed.
+        self._calls = 0
         metadata = self._read("")
         fullname = metadata.get("full_name")
         if (metadata.get("private") is not False or not isinstance(fullname, str)
