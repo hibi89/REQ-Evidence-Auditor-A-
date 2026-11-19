@@ -80,6 +80,50 @@ class ChangeWatchSynthetic(unittest.TestCase):
             self.assertEqual(calls, ["main", b])
             self.assertEqual(watcher.stop()["status"], "STOPPED")
 
+    def test_stop_during_initial_local_start_cannot_rearm_watch(self):
+        from reqea.core import watch as module
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "root"
+            req = _project(root)
+            watcher = LocalChangeWatch(str(root), str(req))
+            original = module.build_audit
+
+            def cancelled(*args, **kwargs):
+                result = original(*args, **kwargs)
+                watcher.stop()  # User closed the view during initial analysis.
+                return result
+
+            with patch.object(module, "build_audit", side_effect=cancelled):
+                outcome = watcher.start(now=0)
+            self.assertEqual(outcome["status"], "STOPPED")
+            self.assertFalse(watcher.active)
+            self.assertIsNone(watcher._audit)
+            self.assertIsNone(watcher._fingerprint)
+            self.assertEqual(watcher.tick(now=900)["status"], "STOPPED")
+
+    def test_stop_during_initial_remote_start_cannot_rearm_watch(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "public"
+            _project(root)
+            watcher = PublicGitHubChangeWatch(
+                "https://github.com/o/r", "main", "requirements.md"
+            )
+
+            @contextmanager
+            def interrupted_snapshot(url, ref):
+                watcher.stop()  # STOP while a pinned HTTPS snapshot is loading.
+                yield {"root": str(root), "owner": "o", "repository": "r",
+                       "commit_sha": "a" * 40, "source_sha": "UNVERIFIED"}
+
+            with patch("reqea.core.watch.public_github_snapshot",
+                       side_effect=interrupted_snapshot):
+                outcome = watcher.start(now=0)
+            self.assertEqual(outcome["status"], "STOPPED")
+            self.assertFalse(watcher.active)
+            self.assertIsNone(watcher._head)
+            self.assertIsNone(watcher._audit)
+            self.assertEqual(watcher.tick(now=900)["status"], "STOPPED")
+
     def test_initial_source_mutation_during_audit_fails_closed(self):
         from reqea.core import watch as module
         with tempfile.TemporaryDirectory() as d:

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from threading import Lock
 import time
 
 from reqea_codegraph.files import read_file
@@ -73,9 +74,12 @@ class LocalChangeWatch:
         self._checked_at = float("-inf")
         self._audit: dict | None = None
         self._generation = 0
+        self._state_lock = Lock()
 
     def start(self, *, now: float | None = None) -> dict:
         """Explicit opt-in only; do not persist any source or automatically save."""
+        with self._state_lock:
+            generation = self._generation
         found = discover_local_requirements(self.root)
         selected_path = Path(self.requirements)
         if selected_path.is_absolute():
@@ -84,7 +88,6 @@ class LocalChangeWatch:
             except ValueError as exc:
                 raise ValueError("canonical requirements must be inside selected root") from exc
         selected = select_requirements(found, selected_path.as_posix())
-        self.requirements = selected["requirements_path"]
         # Do not bless an initial audit if source changed mid-analysis.
         initial_fingerprint = _local_fingerprint(self.root)
         candidate = build_audit(self.root, selected["requirements_path"])
@@ -96,20 +99,27 @@ class LocalChangeWatch:
         source = inspect_local_source(self.root, selected["requirements_path"])
         if hashlib.sha256(read_checked_requirements(source)).hexdigest() != selected["sha256"]:
             raise ValueError("canonical requirements changed during initial audit")
-        self._baseline_doc = selected["sha256"]
-        self._audit = candidate
-        self._fingerprint = later_fingerprint
-        self._pending = None
-        self._checked_at = time.monotonic() if now is None else float(now)
-        self._generation += 1
-        self.active = True
-        return {"status": "STARTED", "audit": self._audit,
-                "fingerprint": self._fingerprint, "verification_status": "NOT_RUN"}
+        # STOP may arrive while the initial audit is running in another thread.
+        # Commit the new monitoring state only while holding the same lock as stop().
+        with self._state_lock:
+            if generation != self._generation:
+                return {"status": "STOPPED"}
+            self.requirements = selected["requirements_path"]
+            self._baseline_doc = selected["sha256"]
+            self._audit = candidate
+            self._fingerprint = later_fingerprint
+            self._pending = None
+            self._checked_at = time.monotonic() if now is None else float(now)
+            self._generation += 1
+            self.active = True
+            return {"status": "STARTED", "audit": self._audit,
+                    "fingerprint": self._fingerprint, "verification_status": "NOT_RUN"}
 
     def stop(self) -> dict:
-        self.active = False
-        self._generation += 1
-        self._pending = None
+        with self._state_lock:
+            self.active = False
+            self._generation += 1
+            self._pending = None
         return {"status": "STOPPED"}
 
     def tick(self, *, now: float | None = None) -> dict:
@@ -144,19 +154,23 @@ class LocalChangeWatch:
             if hashlib.sha256(read_checked_requirements(source)).hexdigest() != self._baseline_doc:
                 raise ValueError("canonical requirements changed during audit")
         except (ValueError, OSError, UnicodeError):
-            self.active = False
-            self._generation += 1
+            with self._state_lock:
+                if not self.active or generation != self._generation:
+                    return {"status": "STOPPED"}
+                self.active = False
+                self._generation += 1
             return {"status": "PAUSED", "reason": "LOCAL_INPUT_CHANGED_OR_UNSAFE"}
-        if not self.active or generation != self._generation:
-            return {"status": "STOPPED"}
-        previous = self._audit
-        self._audit = new_audit
-        self._fingerprint = fingerprint
-        self._pending = None
-        return {"status": "CHANGED", "previous": previous, "current": new_audit,
-                "fingerprint": fingerprint,
-                "source_sha": new_audit.get("source_sha", "UNVERIFIED"),
-                "verification_status": "NOT_RUN"}
+        with self._state_lock:
+            if not self.active or generation != self._generation:
+                return {"status": "STOPPED"}
+            previous = self._audit
+            self._audit = new_audit
+            self._fingerprint = fingerprint
+            self._pending = None
+            return {"status": "CHANGED", "previous": previous, "current": new_audit,
+                    "fingerprint": fingerprint,
+                    "source_sha": new_audit.get("source_sha", "UNVERIFIED"),
+                    "verification_status": "NOT_RUN"}
 
 
 class PublicGitHubChangeWatch:
@@ -180,27 +194,34 @@ class PublicGitHubChangeWatch:
         self._backoff = self.interval
         self._audit: dict | None = None
         self._generation = 0
+        self._state_lock = Lock()
 
     def start(self, *, now: float | None = None) -> dict:
         """Explicit consent begins one pinned public snapshot analysis."""
+        with self._state_lock:
+            generation = self._generation
         with public_github_snapshot(self.url, self.ref) as snapshot:
             selection, audit = _candidate_audit(snapshot["root"], self.requirements)
             head = snapshot["commit_sha"]
-        self._selected = selection["relative_path"]
-        self._document_digest = selection["sha256"]
-        self._audit = audit
-        self._head = head
-        self._checked_at = time.monotonic() if now is None else float(now)
-        self._backoff = self.interval
-        self._generation += 1
-        self.active = True
-        return {"status": "STARTED", "repository": self.reader.owner + "/" + self.reader.repo,
-                "pinned_commit_sha": head, "source_sha": "UNVERIFIED",
-                "verification_status": "NOT_RUN", "audit": audit}
+        with self._state_lock:
+            if generation != self._generation:
+                return {"status": "STOPPED"}
+            self._selected = selection["relative_path"]
+            self._document_digest = selection["sha256"]
+            self._audit = audit
+            self._head = head
+            self._checked_at = time.monotonic() if now is None else float(now)
+            self._backoff = self.interval
+            self._generation += 1
+            self.active = True
+            return {"status": "STARTED", "repository": self.reader.owner + "/" + self.reader.repo,
+                    "pinned_commit_sha": head, "source_sha": "UNVERIFIED",
+                    "verification_status": "NOT_RUN", "audit": audit}
 
     def stop(self) -> dict:
-        self.active = False
-        self._generation += 1
+        with self._state_lock:
+            self.active = False
+            self._generation += 1
         return {"status": "STOPPED"}
 
     def tick(self, *, now: float | None = None) -> dict:
@@ -214,7 +235,10 @@ class PublicGitHubChangeWatch:
         try:
             head = self.reader.head_commit_sha()
             if head == self._head:
-                self._backoff = self.interval
+                with self._state_lock:
+                    if not self.active or generation != self._generation:
+                        return {"status": "STOPPED"}
+                    self._backoff = self.interval
                 return {"status": "UNCHANGED"}
             # Fix the exact observed SHA to prevent a ref moving during transfer.
             with public_github_snapshot(self.url, head) as snapshot:
@@ -226,18 +250,22 @@ class PublicGitHubChangeWatch:
         except (ValueError, OSError, UnicodeError) as exc:
             # Only rate-limit/HTTP-access faults are recoverable through bounded
             # backoff; unexpected source changes or snapshot failures PAUSE.
-            if "rate limited" in str(exc):
-                self._backoff = min(max(self._backoff * 2, self.interval), 14_400.0)
-                return {"status": "BACKOFF", "retry_seconds": self._backoff}
-            self.active = False
-            self._generation += 1
+            with self._state_lock:
+                if not self.active or generation != self._generation:
+                    return {"status": "STOPPED"}
+                if "rate limited" in str(exc):
+                    self._backoff = min(max(self._backoff * 2, self.interval), 14_400.0)
+                    return {"status": "BACKOFF", "retry_seconds": self._backoff}
+                self.active = False
+                self._generation += 1
             return {"status": "PAUSED", "reason": "REMOTE_REF_OR_SCOPE_UNSAFE"}
-        if not self.active or generation != self._generation:
-            return {"status": "STOPPED"}
-        old_audit = self._audit
-        self._audit = audit
-        self._head = head
-        self._backoff = self.interval
-        return {"status": "CHANGED", "previous": old_audit, "current": audit,
-                "pinned_commit_sha": head, "source_sha": "UNVERIFIED",
-                "verification_status": "NOT_RUN"}
+        with self._state_lock:
+            if not self.active or generation != self._generation:
+                return {"status": "STOPPED"}
+            old_audit = self._audit
+            self._audit = audit
+            self._head = head
+            self._backoff = self.interval
+            return {"status": "CHANGED", "previous": old_audit, "current": audit,
+                    "pinned_commit_sha": head, "source_sha": "UNVERIFIED",
+                    "verification_status": "NOT_RUN"}
