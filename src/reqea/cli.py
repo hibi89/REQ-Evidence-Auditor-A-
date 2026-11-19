@@ -120,7 +120,8 @@ def main(argv: list[str] | None = None) -> int:
                               "changed_count": delta["changed_count"],
                               "verification_status": "NOT_RUN",
                               "save_status": stored["status"],
-                              "file": stored["file"], "sha256": stored["sha256"]},
+                              "record_name": Path(stored["file"]).name,
+                              "sha256": stored["sha256"]},
                              ensure_ascii=False))
             return 0
         if args.command == "audit-source":

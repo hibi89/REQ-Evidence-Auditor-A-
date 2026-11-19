@@ -100,7 +100,19 @@ class PublicGitHubReader:
             raise ValueError("GitHub request budget exceeded")
         owner = quote(self.owner, safe="")
         repo = quote(self.repo, safe="")
-        if (suffix and not suffix.startswith("/")) or "://" in suffix or "\\" in suffix:
+        # Limit even internal callers to explicit read-only routes inside the
+        # chosen repository. Never accept traversal, ad-hoc query or URL paths.
+        if suffix == "":
+            pass
+        elif suffix.startswith("/commits/"):
+            selected = suffix[len("/commits/"):]
+            if not selected or validate_ref(selected) != selected:
+                raise ValueError("invalid GitHub commit route")
+        elif re.fullmatch(r"/git/trees/[0-9a-fA-F]{40}\\?recursive=1", suffix):
+            pass
+        elif re.fullmatch(r"/git/blobs/[0-9a-fA-F]{40}", suffix):
+            pass
+        else:
             raise ValueError("invalid GitHub API route")
         return _json_get("/repos/" + owner + "/" + repo + suffix, cap=cap)
 
