@@ -121,6 +121,15 @@ with tempfile.TemporaryDirectory() as d:
             pump(app, lambda: "저장:" in app.status_text.get()
                  and app.start_button.instate(["!disabled"]), "registered project audit")
             assert (v11out / "audit.json").is_file()
+            # A cached registered project is never authorization to audit from
+            # another output folder. Real Tk button path must reject it.
+            app.paths["out"].set(str(base / "unapproved-registry"))
+            with patch("reqea.gui.app.messagebox.showerror") as denied_stale:
+                app.start_audit()
+                denied_stale.assert_called_once()
+            assert not (base / "unapproved-registry").exists()
+            assert app.start_button.instate(["!disabled"])
+            app.paths["out"].set(str(v11out))
             app.mode.set("local")
             app.start_watch()
             pump(app, lambda: app._watcher is not None and app._watcher.active,

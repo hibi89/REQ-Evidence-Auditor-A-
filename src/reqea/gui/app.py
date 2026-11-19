@@ -202,6 +202,12 @@ class AuditorApp(tk.Tk):
             if choice not in self._profile_labels:
                 raise ValueError("select a saved project from approved output")
             saved = self._profiles[self._profile_labels.index(choice)]
+            # An old in-memory selection is not continued authorization.
+            # Re-read the exact currently selected output registry before
+            # discovery, analysis or opt-in watching, including after an
+            # output-folder switch or an on-disk tamper.
+            if saved not in load_projects(out_dir=self.paths["out"].get().strip()):
+                raise ValueError("saved project registry changed; reload required")
             return dict(saved)
         if mode == "local":
             root = self.paths["repo"].get().strip()
@@ -408,6 +414,12 @@ class AuditorApp(tk.Tk):
         try:
             self._profiles = load_projects(out_dir=self.paths["out"].get().strip())
         except (ValueError, OSError, UnicodeError):
+            # Fail closed: an earlier approved output folder or an invalid
+            # registry must not leave a selectable cached source behind.
+            self._profiles = []
+            self._profile_labels = []
+            self.profile_picker.configure(values=[])
+            self.profile_choice.set("")
             self.status_text.set("등록 프로젝트 읽기 차단 · 결과 폴더 확인")
             return
         self._profile_labels = [f"{i+1}. {item['kind']}: {item['source']}"

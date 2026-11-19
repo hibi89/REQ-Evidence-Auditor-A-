@@ -98,6 +98,78 @@ class CallerToCalleeSourceAudit(unittest.TestCase):
             self.assertEqual(json.loads((out / "manifest.json").read_text())["source_sha"],
                              "UNVERIFIED")
 
+    def test_gui_registered_selection_revalidates_current_registry_and_fails_closed(self):
+        # Exercise the real GUI callback methods without requiring a window.
+        # This catches reuse of a cached selection after changing the approved
+        # output folder, deleting a bookmark or corrupting its on-disk bytes.
+        from reqea.core.history import register_project
+        from reqea.gui.app import AuditorApp
+        from types import SimpleNamespace
+
+        class Variable:
+            def __init__(self, value=""):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+            def set(self, value):
+                self.value = value
+
+        class Picker:
+            def __init__(self):
+                self.values = []
+
+            def configure(self, *, values):
+                self.values = list(values)
+
+        with tempfile.TemporaryDirectory() as d:
+            base = Path(d)
+            root = base / "owner-project"
+            root.mkdir()
+            (root / "keep.py").write_bytes(b"OWNER_SOURCE_UNCHANGED")
+            valid = base / "approved-output"
+            unrelated = base / "other-output"
+            profile = {"kind": "local", "source": str(root),
+                       "requirements": "requirements.md"}
+            created = register_project(profile, out_dir=str(valid))
+            original = Path(created["file"]).read_bytes()
+            gui = SimpleNamespace(
+                mode=Variable("registered"),
+                paths={"out": Variable(str(valid))},
+                profile_choice=Variable(), profile_picker=Picker(),
+                status_text=Variable(), _profiles=[], _profile_labels=[],
+            )
+            AuditorApp.load_registered_projects(gui)
+            self.assertEqual(len(gui._profiles), 1)
+            self.assertEqual(AuditorApp._source(gui)["source"], str(root))
+            selected_label = gui.profile_choice.get()
+
+            gui.paths["out"].set(str(unrelated))
+            with self.assertRaisesRegex(ValueError, "saved project registry changed"):
+                AuditorApp._source(gui)
+            self.assertFalse(unrelated.exists(), "stale selection must never create output")
+            self.assertEqual(gui.profile_choice.get(), selected_label)
+            AuditorApp.load_registered_projects(gui)
+            self.assertEqual(gui._profiles, [])
+            self.assertEqual(gui._profile_labels, [])
+            self.assertEqual(gui.profile_picker.values, [])
+            self.assertEqual(gui.profile_choice.get(), "")
+            with self.assertRaises(ValueError):
+                AuditorApp._source(gui)
+
+            gui.paths["out"].set(str(valid))
+            AuditorApp.load_registered_projects(gui)
+            self.assertEqual(len(gui._profiles), 1)
+            Path(created["file"]).write_bytes(original + b" ")
+            with self.assertRaisesRegex(ValueError, "modified registered project record"):
+                AuditorApp._source(gui)
+            AuditorApp.load_registered_projects(gui)
+            self.assertEqual(gui._profiles, [])
+            self.assertEqual(gui.profile_choice.get(), "")
+            self.assertEqual(Path(created["file"]).read_bytes(), original + b" ")
+            self.assertEqual((root / "keep.py").read_bytes(), b"OWNER_SOURCE_UNCHANGED")
+
     def test_ref_on_local_root_and_output_inside_source_rejected(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d) / "repo"
