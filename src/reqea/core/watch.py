@@ -14,7 +14,7 @@ import time
 from reqea_codegraph.files import read_file
 from reqea_codegraph.walk import scan_tree
 from .discovery import discover_local_requirements
-from .github_source import GitHubRateLimitError, PublicGitHubReader
+from .github_source import GitHubRetryableError, PublicGitHubReader
 from .orchestrator import build_audit
 from .selector import select_requirements
 from .snapshot import public_github_snapshot
@@ -372,8 +372,8 @@ class PublicGitHubChangeWatch:
             with self._state_lock:
                 if not self.active or generation != self._generation:
                     return {"status": "STOPPED"}
-                if isinstance(exc, GitHubRateLimitError):
-                    # Respect explicit GitHub Retry-After or reset deadlines.
+                if isinstance(exc, GitHubRetryableError):
+                    # Respect rate-limit and transient-server Retry-After deadlines.
                     hint = exc.retry_seconds if exc.retry_seconds is not None else 0.0
                     self._backoff = min(max(self._backoff * 2, self.interval, hint), 86_400.0)
                     # Retry-After is relative to the HTTP response, not the

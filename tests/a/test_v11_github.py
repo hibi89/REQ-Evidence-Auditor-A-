@@ -63,6 +63,45 @@ class PublicGitHubSnapshot(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, expected):
                         github_source._json_get("/repos/o/r")
 
+    def test_transient_http_server_failures_are_retryable_not_denied(self):
+        for code in (408, 500, 502, 503, 504):
+            with self.subTest(code=code):
+                headers = Message()
+                headers["Retry-After"] = "3600"
+                class FailingOpener:
+                    def open(self, request, timeout):
+                        raise HTTPError(request.full_url, code, "untrusted", headers, None)
+                with patch.object(github_source, "build_opener",
+                                  return_value=FailingOpener()):
+                    with self.assertRaises(github_source.GitHubTransientError) as caught:
+                        github_source._json_get("/repos/o/r")
+                self.assertEqual(caught.exception.retry_seconds, 3600)
+                self.assertNotIn("untrusted", str(caught.exception))
+
+    def test_permanent_401_404_501_do_not_retry(self):
+        for code in (401, 404, 501):
+            with self.subTest(code=code):
+                class FailingOpener:
+                    def open(self, request, timeout):
+                        raise HTTPError(request.full_url, code, "untrusted", Message(), None)
+                with patch.object(github_source, "build_opener",
+                                  return_value=FailingOpener()):
+                    with self.assertRaises(ValueError) as caught:
+                        github_source._json_get("/repos/o/r")
+                self.assertNotIsInstance(caught.exception, github_source.GitHubRetryableError)
+
+    def test_transient_retry_header_invalid_fails_closed(self):
+        headers = Message()
+        headers["Retry-After"] = "not a date"
+        class FailingOpener:
+            def open(self, request, timeout):
+                raise HTTPError(request.full_url, 503, "untrusted", headers, None)
+        with patch.object(github_source, "build_opener",
+                          return_value=FailingOpener()):
+            with self.assertRaisesRegex(ValueError, "invalid GitHub retry hint") as caught:
+                github_source._json_get("/repos/o/r")
+        self.assertNotIsInstance(caught.exception, github_source.GitHubRetryableError)
+
     def test_rate_limit_retry_after_and_reset_deadlines_without_network(self):
         # A server-required 2h delay must not be reduced to normal 30m backoff.
         numeric = Message()

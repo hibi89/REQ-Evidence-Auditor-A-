@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 import re
 
-from reqea.core.github_source import GitHubRateLimitError, PublicGitHubReader
+from reqea.core.github_source import GitHubRetryableError, PublicGitHubReader
 from reqea.core.snapshot import public_github_snapshot
 
 _SELF_REPO = "https://github.com/hibi89/REQ-Evidence-Auditor-A-"
@@ -58,7 +58,7 @@ def main() -> int:
         # CI runners share unauthenticated GitHub API quotas. Skipping due to
         # external 403/429/offline is explicitly NOT success and is reported
         # separately from the synthetic test results.
-        if isinstance(exc, GitHubRateLimitError) or str(exc) == "GitHub API network unavailable":
+        if isinstance(exc, GitHubRetryableError) or str(exc) == "GitHub API network unavailable":
             print("LIVE_PUBLIC_GITHUB_P2_SKIP: quota/network unavailable; NOT_VERIFIED")
             return 0
         raise

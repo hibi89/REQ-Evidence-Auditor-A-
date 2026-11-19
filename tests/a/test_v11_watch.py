@@ -685,6 +685,71 @@ class ChangeWatchSynthetic(unittest.TestCase):
             self.assertEqual(watcher._head, old_head)
             self.assertIs(watcher._audit, old_audit)
 
+    def test_transient_503_recovers_after_retry_after_without_early_poll(self):
+        from email.message import Message
+        from urllib.error import HTTPError
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "public"
+            _project(root)
+
+            @contextmanager
+            def synthetic_snapshot(url, ref, *, before_request=None):
+                yield {"root": str(root), "owner": "o", "repository": "r",
+                       "commit_sha": "a" * 40, "source_sha": "UNVERIFIED"}
+
+            watcher = PublicGitHubChangeWatch("https://github.com/o/r", "main",
+                                               "requirements.md")
+            with patch("reqea.core.watch.public_github_snapshot",
+                       side_effect=synthetic_snapshot):
+                watcher.start(now=0)
+            original = watcher._audit
+            headers = Message()
+            headers["Retry-After"] = "3600"
+            class FailingOpener:
+                def open(self, request, timeout):
+                    raise HTTPError(request.full_url, 503, "untrusted", headers, None)
+            with patch("reqea.core.github_source.build_opener",
+                       return_value=FailingOpener()):
+                result = watcher.tick(now=900)
+            self.assertEqual(result["status"], "BACKOFF")
+            self.assertEqual(result["retry_seconds"], 3600)
+            self.assertIs(watcher._audit, original)
+            self.assertEqual(watcher._head, "a" * 40)
+            self.assertEqual(watcher.seconds_until_due(now=4499), 1)
+            with patch.object(watcher.reader, "head_commit_sha",
+                              return_value="a" * 40) as poll:
+                self.assertEqual(watcher.tick(now=4499)["status"], "WAIT")
+                poll.assert_not_called()
+                self.assertEqual(watcher.tick(now=4500)["status"], "UNCHANGED")
+                poll.assert_called_once_with(before_request=unittest.mock.ANY)
+            self.assertTrue(watcher.active)
+            self.assertIs(watcher._audit, original)
+
+    def test_transient_502_without_hint_uses_bounded_exponential(self):
+        from reqea.core.github_source import GitHubTransientError
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "public"
+            _project(root)
+            @contextmanager
+            def synthetic_snapshot(url, ref, *, before_request=None):
+                yield {"root": str(root), "owner": "o", "repository": "r",
+                       "commit_sha": "a" * 40, "source_sha": "UNVERIFIED"}
+            watcher = PublicGitHubChangeWatch("https://github.com/o/r", "main",
+                                               "requirements.md")
+            with patch("reqea.core.watch.public_github_snapshot",
+                       side_effect=synthetic_snapshot):
+                watcher.start(now=0)
+            with patch.object(watcher.reader, "head_commit_sha",
+                              side_effect=GitHubTransientError()):
+                first = watcher.tick(now=900)
+                self.assertEqual(first["status"], "BACKOFF")
+                self.assertEqual(first["retry_seconds"], 1800)
+                self.assertEqual(watcher.tick(now=1799)["status"], "WAIT")
+                second = watcher.tick(now=2700)
+                self.assertEqual(second["retry_seconds"], 3600)
+            self.assertTrue(watcher.active)
+            self.assertEqual(watcher.seconds_until_due(now=6300), 0)
+
     def test_remote_rate_limit_backs_off_then_stop(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d) / "public"

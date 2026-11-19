@@ -27,12 +27,26 @@ _MAX_JSON = 2_000_000
 _MAX_RETRY_SECONDS = 86_400
 
 
-class GitHubRateLimitError(ValueError):
-    """Safe retry metadata, never server-provided error text or URLs."""
+class GitHubRetryableError(ValueError):
+    """Constrained retry hint, excluding untrusted remote error messages."""
+
+    def __init__(self, message: str, retry_seconds: float | None = None) -> None:
+        super().__init__(message)
+        self.retry_seconds = retry_seconds
+
+
+class GitHubRateLimitError(GitHubRetryableError):
+    """A GitHub quota or secondary-rate-limit response."""
 
     def __init__(self, retry_seconds: float | None = None) -> None:
-        super().__init__("GitHub rate limited")
-        self.retry_seconds = retry_seconds
+        super().__init__("GitHub rate limited", retry_seconds)
+
+
+class GitHubTransientError(GitHubRetryableError):
+    """Temporary remote HTTP failure; never a permission or scope bypass."""
+
+    def __init__(self, retry_seconds: float | None = None) -> None:
+        super().__init__("GitHub temporarily unavailable", retry_seconds)
 
 
 def _retry_delay(headers) -> float | None:
@@ -125,6 +139,10 @@ def _json_get(path: str, *, cap: int = _MAX_JSON) -> dict:
             or headers.get("Retry-After") is not None))
         if limited:
             raise GitHubRateLimitError(_retry_delay(headers)) from None
+        # A transient GitHub service failure must not permanently disable
+        # an already-approved foreground watch. Keep auth/ref errors fatal.
+        if exc.code in (408, 500, 502, 503, 504):
+            raise GitHubTransientError(_retry_delay(headers)) from None
         if exc.code == 403:
             raise ValueError("GitHub access denied") from None
         if exc.code in (401, 404):
