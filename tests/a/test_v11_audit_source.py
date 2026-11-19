@@ -331,6 +331,53 @@ class CallerToCalleeSourceAudit(unittest.TestCase):
             self.assertFalse((base / "foreign-output").exists())
             self.assertEqual(Path(created["file"]).read_bytes(), original)
 
+    def test_direct_public_ambiguous_candidates_require_accept_before_audit_and_watch(self):
+        from reqea.gui.app import AuditorApp
+        from types import SimpleNamespace
+
+        class Var:
+            def __init__(self, value=""):
+                self.value = value
+            def get(self):
+                return self.value
+            def set(self, v):
+                self.value = v
+
+        with tempfile.TemporaryDirectory() as d:
+            out = str(Path(d) / "approved")
+            target = {"kind": "github", "source": "https://github.com/example/example",
+                      "ref": "main", "requirements": "docs/first.md"}
+            state = {"url": target["source"], "ref": "main", "status": "AMBIGUOUS",
+                     "commit_sha": "a" * 40,
+                     "candidates": [{"path": "docs/first.md", "sha256": "b" * 64},
+                                    {"path": "docs/second.md", "sha256": "c" * 64}]}
+            fake = SimpleNamespace(
+                mode=Var("github"), remote_url=Var(target["source"]),
+                remote_ref=Var("main"), document_choice=Var("docs/first.md"),
+                paths={"out": Var(out)}, status_text=Var(""),
+                remote_discovery=state, _accepted_remote=None,
+                _accepted_registered_remote=None)
+            fake._source = lambda: dict(target)
+            with self.assertRaisesRegex(ValueError, "explicit selection"):
+                AuditorApp._active_remote_candidate_sha(fake, target, "docs/first.md")
+            AuditorApp.accept_discovered_document(fake)
+            self.assertEqual(AuditorApp._active_remote_candidate_sha(
+                fake, target, "docs/first.md"), "b" * 64)
+            self.assertEqual(fake._accepted_remote[5], "a" * 40)
+
+            fake.document_choice.set("docs/second.md")
+            with self.assertRaisesRegex(ValueError, "explicit selection"):
+                AuditorApp._active_remote_candidate_sha(fake, target, "docs/second.md")
+            fake.document_choice.set("docs/first.md")
+            fake.remote_discovery["commit_sha"] = "e" * 40
+            with self.assertRaisesRegex(ValueError, "explicit selection"):
+                AuditorApp._active_remote_candidate_sha(fake, target, "docs/first.md")
+            fake.remote_discovery["commit_sha"] = "a" * 40
+            fake.paths["out"].set(str(Path(d) / "unapproved"))
+            with self.assertRaisesRegex(ValueError, "explicit selection"):
+                AuditorApp._active_remote_candidate_sha(fake, target, "docs/first.md")
+            self.assertFalse((Path(d) / "unapproved").exists())
+
     def test_ref_on_local_root_and_output_inside_source_rejected(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d) / "repo"

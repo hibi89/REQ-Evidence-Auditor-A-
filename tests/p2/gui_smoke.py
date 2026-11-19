@@ -249,6 +249,41 @@ with tempfile.TemporaryDirectory() as d:
                 pump(app, lambda: "저장:" in app.status_text.get()
                      and app.start_button.instate(["!disabled"]), "GUI public GitHub source audit")
             assert (v11out / "manifest.json").is_file()
+            # Ambiguous remote candidates must not be analyzed or watched
+            # merely because a combobox entry is highlighted. A selection is
+            # explicit only after the owner clicks "선택 적용".
+            app.remote_discovery = {
+                "url": "https://github.com/example/example", "ref": "main",
+                "commit_sha": "a" * 40, "status": "AMBIGUOUS",
+                "candidates": [
+                    {"path": "requirements.md",
+                     "sha256": hashlib.sha256(small_req.read_bytes()).hexdigest()},
+                    {"path": "docs/other.md", "sha256": "c" * 64}]}
+            with patch("reqea.gui.app.threading.Thread.start") as launched:
+                app.start_audit()
+                launched.assert_not_called()
+                assert "선택 적용" in app.status_text.get()
+                app.start_watch()
+                launched.assert_not_called()
+                assert app._watcher is None and app._starting_watcher is None
+            app.accept_discovered_document()
+            assert app._accepted_remote is not None
+            # Source consent is pinned to discovery SHA for both caller routes.
+            with patch("reqea.gui.app.public_github_snapshot", side_effect=fake_snapshot):
+                app.start_audit()
+                pump(app, lambda: "저장:" in app.status_text.get()
+                     and app.start_button.instate(["!disabled"]),
+                     "explicitly accepted ambiguous public audit")
+            assert app._accepted_remote is not None
+            app.document_choice.set("docs/other.md")
+            assert app._accepted_remote is None, "new candidate revokes old consent"
+            app.document_choice.set("requirements.md")
+            with patch("reqea.gui.app.threading.Thread.start") as launched:
+                app.start_audit()
+                launched.assert_not_called()
+                assert "선택 적용" in app.status_text.get()
+            # Clear synthetic discovery before the following register-first flow.
+            app.remote_discovery = None
             # Register a public source before choosing its requirements
             # document. The GUI must bind an explicit discovered candidate to
             # registered audit+watch without changing the existing bookmark.

@@ -45,6 +45,7 @@ class AuditorApp(tk.Tk):
         # bound to the saved bookmark/output and the exact discovered SHA.
         # It never changes the immutable registered bookmark.
         self._accepted_registered_remote: tuple | None = None
+        self._accepted_remote: tuple | None = None
         self.document_choice = tk.StringVar()
         self.profile_choice = tk.StringVar()
         self._profile_labels: list[str] = []
@@ -182,6 +183,7 @@ class AuditorApp(tk.Tk):
         self._discovery_input_scope = None
         self.remote_discovery = None
         self._accepted_registered_remote = None
+        self._accepted_remote = None
         self.document_choice.set("")
         self.candidate_picker.configure(values=[])
         self.discover_button.state(["!disabled"])
@@ -192,6 +194,13 @@ class AuditorApp(tk.Tk):
     def _on_watch_input_changed(self, *_args: str) -> None:
         # Every Tk edit is checked synchronously before the next GUI timer.
         # Audit, discovery and watch have independent cancellation authorities.
+        # If any candidate selection or its binding changes, returning to an
+        # earlier combobox value must NOT silently restore previous consent.
+        accepted = self._accepted_remote
+        if accepted is not None and (self.mode.get(), self.remote_url.get().strip(),
+                self.remote_ref.get().strip(), self.document_choice.get().strip(),
+                self.paths["out"].get().strip()) != accepted[:5]:
+            self._accepted_remote = None
         active_audit = self._audit_cancel_event
         if (active_audit is not None and not active_audit.is_set()
                 and self._audit_input_scope is not None
@@ -220,6 +229,7 @@ class AuditorApp(tk.Tk):
         self.local_discovery = None
         self.remote_discovery = None
         self._accepted_registered_remote = None
+        self._accepted_remote = None
         self.document_choice.set("")
         self.candidate_picker.configure(values=[])
         self.status_text.set("모드를 선택했습니다. 프로젝트/URL을 확인하고 설계도를 탐색하세요.")
@@ -304,6 +314,7 @@ class AuditorApp(tk.Tk):
         self.local_discovery = None
         self.remote_discovery = None
         self._accepted_registered_remote = None
+        self._accepted_remote = None
         self.document_choice.set("")
         self.candidate_picker.configure(values=[])
         self.paths["requirements"].set("" if target["kind"] == "local" else self.paths["requirements"].get())
@@ -388,14 +399,48 @@ class AuditorApp(tk.Tk):
                 candidate not in {c["path"] for c in self.remote_discovery["candidates"]}):
             self.status_text.set("원격 정본 선택 불가 · GitHub 설계도 재탐색 필요")
             return
+        match = next(c for c in self.remote_discovery["candidates"]
+                     if c["path"] == candidate)
         if self.mode.get() == "registered":
-            match = next(c for c in self.remote_discovery["candidates"]
-                         if c["path"] == candidate)
             self._accepted_registered_remote = (
                 self.profile_choice.get(), self.paths["out"].get().strip(),
                 target["source"], target.get("ref"), candidate,
                 self.remote_discovery["commit_sha"], match["sha256"])
+        else:
+            self._accepted_remote = (
+                "github", target["source"], target.get("ref") or "",
+                candidate, self.paths["out"].get().strip(),
+                self.remote_discovery["commit_sha"], match["sha256"])
         self.status_text.set(f"공개 GitHub 정본: {candidate} · 검수 실행 대기 (NOT VERIFIED)")
+
+    def _active_remote_candidate_sha(self, target: dict, chosen: str | None) -> str | None:
+        """Verify discovery selection before any remote audit or watch start.
+
+        An ambiguous candidate must have been explicitly accepted. This
+        approval is scoped to URL/ref, output folder and the pinned document
+        SHA; selecting another entry cannot inherit it. Single-candidate
+        discovery is accepted by the existing _show_candidates GUI path.
+        """
+        state = self.remote_discovery
+        if state is None:
+            return None
+        if (state.get("url") != target["source"] or
+                state.get("ref") != target.get("ref")):
+            raise ValueError("GitHub ref changed; rediscover canonical document")
+        if state.get("status") not in ("SINGLE_CANDIDATE", "AMBIGUOUS"):
+            raise ValueError("GitHub requirements discovery incomplete")
+        matches = [c for c in state.get("candidates", [])
+                   if isinstance(c, dict) and c.get("path") == chosen]
+        if len(matches) != 1:
+            raise ValueError("choose a discovered canonical document")
+        selected_sha = matches[0].get("sha256")
+        if (self.mode.get() == "github" and state["status"] == "AMBIGUOUS"
+                and self._accepted_remote != (
+                    "github", target["source"], target.get("ref") or "",
+                    chosen, self.paths["out"].get().strip(),
+                    state["commit_sha"], selected_sha)):
+            raise ValueError("ambiguous GitHub document requires explicit selection")
+        return selected_sha
 
     def _render_and_save(self, audit: dict, root: str, out: str,
                          overwrite: bool) -> None:
@@ -422,17 +467,12 @@ class AuditorApp(tk.Tk):
         pin = None
         expected_doc_sha = None
         if target["kind"] == "github" and self.remote_discovery:
-            state = self.remote_discovery
-            if state.get("url") != target["source"] or state.get("ref") != target.get("ref"):
-                self.status_text.set("GitHub URL/ref가 변경되었습니다 · 정본을 다시 탐색하세요")
+            try:
+                expected_doc_sha = self._active_remote_candidate_sha(target, chosen)
+            except ValueError:
+                self.status_text.set("원격 정본 승인 필요 · 설계도 후보를 선택 적용하세요")
                 return
-            pin = state["commit_sha"]
-            if chosen:
-                matches = [c for c in state["candidates"] if c["path"] == chosen]
-                if not matches:
-                    self.status_text.set("선택한 원격 문서가 후보에 없습니다")
-                    return
-                expected_doc_sha = matches[0]["sha256"]
+            pin = self.remote_discovery["commit_sha"]
         cancel = threading.Event()
         self._audit_cancel_event = cancel
         self._audit_input_scope = self._audit_scope_inputs()
@@ -569,6 +609,12 @@ class AuditorApp(tk.Tk):
                     # _source() revalidated approval against this exact
                     # output folder, profile, ref, discovery SHA and document.
                     expected_sha = approval[6]
+                if self.remote_discovery is not None:
+                    # Match an explicitly accepted ambiguous selection and
+                    # SHA even for direct public GitHub mode. The same check
+                    # is enforced before starting the optional HTTP worker.
+                    approved_sha = self._active_remote_candidate_sha(target, chosen)
+                    expected_sha = approved_sha
                 watcher = PublicGitHubChangeWatch(
                     target["source"], target.get("ref"), chosen or None,
                     expected_document_sha=expected_sha)
