@@ -150,7 +150,9 @@ class PublicGitHubReader:
 
     def _read(self, suffix: str, cap: int = _MAX_JSON) -> dict:
         self._calls += 1
-        if self._calls > 128:
+        # 200 allowed snapshot source blobs plus metadata/commit/tree GETs.
+        # Keep this per-operation cap explicit; never unbounded.
+        if self._calls > 203:
             raise ValueError("GitHub request budget exceeded")
         owner = quote(self.owner, safe="")
         repo = quote(self.repo, safe="")
