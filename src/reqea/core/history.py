@@ -336,7 +336,16 @@ def load_projects(*, out_dir: str) -> list[dict]:
         if fingerprint != p.stem.removeprefix("reqea-profile-"):
             raise ValueError("modified registered project record")
         parsed = json.loads(encoded.decode("utf-8"))
-        records.append(_validated_profile(parsed))
+        safe = _validated_profile(parsed)
+        # A self-consistent SHA256 filename does not make arbitrary JSON
+        # trustworthy. Accept only the exact canonical record we write;
+        # otherwise an extra private-source/authority field or duplicated JSON
+        # key is silently discarded and shown as an approved GUI bookmark.
+        canonical = (json.dumps(safe, ensure_ascii=False, sort_keys=True,
+                                separators=(",", ":")) + "\n").encode("utf-8")
+        if encoded != canonical:
+            raise ValueError("noncanonical registered project record")
+        records.append(safe)
     return records
 
 

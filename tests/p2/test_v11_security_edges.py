@@ -15,7 +15,7 @@ from unittest.mock import patch
 
 from reqea.cli import main
 from reqea.core.github_source import PublicGitHubReader, _RejectRedirect, parse_public_github_url
-from reqea.core.history import compare_audits, save_delta, load_deltas, register_project
+from reqea.core.history import compare_audits, save_delta, load_deltas, register_project, load_projects
 from reqea.core.snapshot import public_github_snapshot
 
 
@@ -136,6 +136,62 @@ class V11SecurityBoundaryTests(unittest.TestCase):
                     (folder / f"reqea-delta-{sha}.json").write_bytes(encoded)
                     with self.assertRaises(ValueError):
                         load_deltas(out_dir=str(out))
+
+    def test_hash_consistent_forged_project_registry_is_rejected_before_cli_selection(self):
+        # Project bookmarks and delta history require the same canonical
+        # on-disk trust boundary: hash-addressing alone cannot authorize
+        # extra fields, hidden source text or a forged verification claim.
+        import hashlib
+        with tempfile.TemporaryDirectory() as d:
+            base = Path(d)
+            source = base / "owner-source"
+            source.mkdir()
+            sentinel = source / "keep.py"
+            sentinel.write_bytes(b"OWNER_ORIGINAL")
+            approved = base / "approved"
+            original = register_project(
+                {"kind": "local", "source": str(source), "requirements": "docs/REQ.md"},
+                out_dir=str(approved))
+            original_bytes = Path(original["file"]).read_bytes()
+            record = json.loads(original_bytes.decode("utf-8"))
+            self.assertEqual(load_projects(out_dir=str(approved)), [record])
+            variants = {
+                "extra_verification_claim": dict(record, verification_status="VERIFIED"),
+                "hidden_source": dict(record, raw_private_source="SYNTHETIC_PRIVATE_SOURCE"),
+                "wrong_schema": dict(record, schema_version="reqea.project.v99"),
+                "unexpected_ref": dict(record, ref="main"),
+                "extra_key": dict(record, export_secret="SYNTHETIC_CANARY"),
+            }
+            for label, forged in variants.items():
+                with self.subTest(label=label):
+                    out = base / label
+                    folder = out / "reqea-projects"
+                    folder.mkdir(parents=True)
+                    data = (json.dumps(forged, ensure_ascii=False, sort_keys=True,
+                                       separators=(",", ":")) + "\n").encode("utf-8")
+                    path = folder / ("reqea-profile-" + hashlib.sha256(data).hexdigest() + ".json")
+                    path.write_bytes(data)
+                    with self.assertRaisesRegex(ValueError, "noncanonical"):
+                        load_projects(out_dir=str(out))
+                    err = io.StringIO()
+                    with contextlib.redirect_stderr(err):
+                        self.assertEqual(main(["projects", "--out", str(out)]), 2)
+                    self.assertIn('"status": "UNASSESSED"', err.getvalue())
+                    self.assertNotIn("SYNTHETIC_", err.getvalue())
+                    self.assertEqual(path.read_bytes(), data, "preserve forged record as evidence")
+            # Even with an internally valid record, duplicated JSON keys or
+            # noncanonical bytes must never be silently normalized on read.
+            bad = original_bytes.rstrip(b"\\n") + b" "
+            out = base / "noncanonical-encoding"
+            folder = out / "reqea-projects"
+            folder.mkdir(parents=True)
+            path = folder / ("reqea-profile-" + hashlib.sha256(bad).hexdigest() + ".json")
+            path.write_bytes(bad)
+            with self.assertRaisesRegex(ValueError, "noncanonical"):
+                load_projects(out_dir=str(out))
+            self.assertEqual(path.read_bytes(), bad)
+            self.assertEqual(Path(original["file"]).read_bytes(), original_bytes)
+            self.assertEqual(sentinel.read_bytes(), b"OWNER_ORIGINAL")
 
     def test_symlinked_history_folder_never_writes_outside_approved_destination(self):
         with tempfile.TemporaryDirectory() as d:
