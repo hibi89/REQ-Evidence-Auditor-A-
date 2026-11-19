@@ -76,7 +76,14 @@ class LocalChangeWatch:
     def start(self, *, now: float | None = None) -> dict:
         """Explicit opt-in only; do not persist any source or automatically save."""
         found = discover_local_requirements(self.root)
-        selected = select_requirements(found, self.requirements)
+        selected_path = Path(self.requirements)
+        if selected_path.is_absolute():
+            try:
+                selected_path = selected_path.relative_to(Path(self.root).absolute())
+            except ValueError as exc:
+                raise ValueError("canonical requirements must be inside selected root") from exc
+        selected = select_requirements(found, selected_path.as_posix())
+        self.requirements = selected["requirements_path"]
         self._baseline_doc = selected["sha256"]
         self._audit = build_audit(self.root, selected["requirements_path"])
         if _FATAL.intersection(self._audit.get("warnings", [])):
