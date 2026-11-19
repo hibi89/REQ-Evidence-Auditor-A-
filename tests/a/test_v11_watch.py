@@ -242,6 +242,29 @@ class ChangeWatchSynthetic(unittest.TestCase):
             self.assertEqual(watcher._head, head)
             self.assertEqual(watcher.stop()["status"], "STOPPED")
 
+    def test_remote_access_denial_pauses_without_retrying(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "public"
+            _project(root)
+
+            @contextmanager
+            def fake_snapshot(url, ref):
+                yield {"root": str(root), "owner": "o", "repository": "r",
+                       "commit_sha": "a" * 40, "source_sha": "UNVERIFIED"}
+
+            watcher = PublicGitHubChangeWatch(
+                "https://github.com/o/r", "main", "requirements.md"
+            )
+            with patch("reqea.core.watch.public_github_snapshot",
+                       side_effect=fake_snapshot):
+                self.assertEqual(watcher.start(now=0)["status"], "STARTED")
+            with patch.object(watcher.reader, "head_commit_sha",
+                              side_effect=ValueError("GitHub access denied")):
+                result = watcher.tick(now=900)
+            self.assertEqual(result["status"], "PAUSED")
+            self.assertFalse(watcher.active)
+            self.assertEqual(watcher.tick(now=100000)["status"], "STOPPED")
+
     def test_remote_rate_limit_backs_off_then_stop(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d) / "public"

@@ -70,8 +70,16 @@ def _json_get(path: str, *, cap: int = _MAX_JSON) -> dict:
             if len(body) > cap:
                 raise ValueError("GitHub API payload exceeds limit")
     except HTTPError as exc:
-        if exc.code in (403, 429):
-            raise ValueError("GitHub rate limited or access denied") from None
+        # A bare 403 is often a permission/access denial, not throttling.
+        # Only an explicit GitHub quota/reset signal warrants retry/backoff.
+        headers = exc.headers
+        limited = exc.code == 429 or (exc.code == 403 and headers is not None and (
+            headers.get("X-RateLimit-Remaining") == "0"
+            or headers.get("Retry-After") is not None))
+        if limited:
+            raise ValueError("GitHub rate limited") from None
+        if exc.code == 403:
+            raise ValueError("GitHub access denied") from None
         if exc.code in (401, 404):
             raise ValueError("GitHub repository/ref unavailable or not public") from None
         raise ValueError("GitHub API rejected request") from None

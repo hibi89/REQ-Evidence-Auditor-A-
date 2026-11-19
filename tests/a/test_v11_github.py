@@ -4,12 +4,15 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+from email.message import Message
+from urllib.error import HTTPError
 from pathlib import Path
 from unittest.mock import patch
 import unittest
 
 from reqea.core.github_source import (PublicGitHubReader, parse_public_github_url,
                                       validate_ref)
+from reqea.core import github_source
 from reqea.core.snapshot import public_github_snapshot
 
 
@@ -34,6 +37,29 @@ class PublicGitHubSnapshot(unittest.TestCase):
                     "heads/%2Fsecret", "main?token=x", "refs/a.lock", "foo\\bar"):
             with self.subTest(ref=ref), self.assertRaises(ValueError):
                 validate_ref(ref)
+
+    def test_http_403_distinguishes_denial_from_quota_without_network(self):
+        # GitHub 403 alone must not requeue an inaccessible repo forever.
+        cases = [
+            (403, {}, "GitHub access denied"),
+            (403, {"X-RateLimit-Remaining": "0"}, "GitHub rate limited"),
+            (403, {"Retry-After": "120"}, "GitHub rate limited"),
+            (429, {}, "GitHub rate limited"),
+        ]
+        for code, values, expected in cases:
+            with self.subTest(status=code, headers=values):
+                headers = Message()
+                for key, value in values.items():
+                    headers[key] = value
+
+                class ForbiddenOpener:
+                    def open(self, request, timeout):
+                        raise HTTPError(request.full_url, code, "synthetic", headers, None)
+
+                with patch.object(github_source, "build_opener",
+                                  return_value=ForbiddenOpener()):
+                    with self.assertRaisesRegex(ValueError, expected):
+                        github_source._json_get("/repos/o/r")
 
     def test_pinned_public_snapshot_verifies_blobs_and_cleans_up(self):
         source = b"# REQ-001 sampled\\nAcceptance criteria:\\n- file exists\\n".replace(b"\\n", b"\n")
