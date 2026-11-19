@@ -104,6 +104,26 @@ class PublicGitHubReader:
             raise ValueError("invalid GitHub API route")
         return _json_get("/repos/" + owner + "/" + repo + suffix, cap=cap)
 
+    def head_commit_sha(self) -> str:
+        """Lightweight explicit public-ref poll (no tree or blob downloads)."""
+        metadata = self._read("")
+        fullname = metadata.get("full_name")
+        if (metadata.get("private") is not False or not isinstance(fullname, str)
+                or fullname.casefold() != (self.owner + "/" + self.repo).casefold()):
+            raise ValueError("repository is not confirmed public")
+        ref = self.requested_ref
+        if ref is None:
+            ref = validate_ref(metadata.get("default_branch"))
+        if ref is None:
+            raise ValueError("GitHub ref unavailable")
+        commit = self._read("/commits/" + quote(ref, safe="/"))
+        sha = commit.get("sha")
+        if not isinstance(sha, str) or not _SHA.fullmatch(sha):
+            raise ValueError("GitHub ref SHA invalid")
+        if _SHA.fullmatch(ref) and sha.lower() != ref.lower():
+            raise ValueError("pinned GitHub commit mismatch")
+        return sha.lower()
+
     def pinned_tree(self) -> tuple[str, str, list[dict]]:
         metadata = self._read("")
         if (metadata.get("private") is not False
