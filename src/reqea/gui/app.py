@@ -8,6 +8,8 @@ from tkinter import filedialog, messagebox, ttk
 
 from reqea.core.orchestrator import build_audit, render_audit_html
 from reqea.core.output import save_artifacts
+from reqea.core.discovery import discover_local_requirements
+from reqea.core.selector import select_requirements
 
 
 class AuditorApp(tk.Tk):
@@ -19,6 +21,8 @@ class AuditorApp(tk.Tk):
         self.status_text = tk.StringVar(value="프로젝트와 요구사항 파일을 선택하세요.")
         self.allow_overwrite = tk.BooleanVar(value=False)
         self.messages: queue.Queue[tuple[bool, str]] = queue.Queue()
+        self.local_discovery: dict | None = None
+        self.document_choice = tk.StringVar()
         content = ttk.Frame(self, padding=18)
         content.pack(fill="both", expand=True)
         ttk.Label(content, text="REQ Evidence Auditor", font=("Arial", 18, "bold")).pack(anchor="w")
@@ -30,11 +34,54 @@ class AuditorApp(tk.Tk):
             ttk.Label(line, text=description, width=31).pack(side="left")
             ttk.Entry(line, textvariable=self.paths[name]).pack(side="left", fill="x", expand=True)
             ttk.Button(line, text="찾기", command=lambda k=name, f=folder: self.choose(k, f)).pack(side="left", padx=(8, 0))
+        discover_line = ttk.Frame(content)
+        discover_line.pack(fill="x", pady=4)
+        ttk.Button(discover_line, text="설계도 자동 찾기", command=self.discover_documents).pack(side="left")
+        self.candidate_picker = ttk.Combobox(discover_line, textvariable=self.document_choice,
+                                              state="readonly", values=[], width=43)
+        self.candidate_picker.pack(side="left", fill="x", expand=True, padx=(8, 0))
+        ttk.Button(discover_line, text="선택 적용", command=self.accept_discovered_document).pack(side="left", padx=(8, 0))
         ttk.Checkbutton(content, text="기존 결과 파일 덮어쓰기 명시적으로 허용", variable=self.allow_overwrite).pack(anchor="w", pady=(12, 5))
         self.start_button = ttk.Button(content, text="로컬 분석 실행", command=self.start_audit)
         self.start_button.pack(anchor="w", pady=(5, 12))
         ttk.Label(content, textvariable=self.status_text, wraplength=620).pack(fill="x", anchor="w")
         self.after(100, self.poll)
+
+    def discover_documents(self) -> None:
+        """Inspect only the explicitly chosen local project, never the whole PC."""
+        root = self.paths["repo"].get().strip()
+        self.local_discovery = None
+        self.candidate_picker.configure(values=[])
+        self.document_choice.set("")
+        self.paths["requirements"].set("")
+        try:
+            result = discover_local_requirements(root)
+        except (ValueError, OSError, UnicodeError) as exc:
+            self.status_text.set(f"설계도 탐색 중단: {type(exc).__name__} · 경로/권한 확인")
+            return
+        self.local_discovery = result
+        candidates = [c["path"] for c in result["candidates"]]
+        self.candidate_picker.configure(values=candidates)
+        if result["status"] == "SINGLE_CANDIDATE":
+            self.document_choice.set(candidates[0])
+            self.accept_discovered_document()
+        elif result["status"] == "AMBIGUOUS":
+            self.status_text.set(f"설계도 후보 {len(candidates)}개 · 정본을 직접 선택하고 '선택 적용'을 누르세요")
+        else:
+            self.status_text.set(f"설계도 탐색 {result['status']} · 원본 변경 없음 / 검수 시작 안 함")
+
+    def accept_discovered_document(self) -> None:
+        if not self.local_discovery or self.local_discovery.get("root") != self.paths["repo"].get().strip():
+            self.status_text.set("탐색한 프로젝트와 현재 프로젝트가 다릅니다. 다시 탐색하세요")
+            return
+        try:
+            selected = select_requirements(self.local_discovery, self.document_choice.get())
+        except (ValueError, OSError, UnicodeError):
+            self.paths["requirements"].set("")
+            self.status_text.set("정본 선택 불가 · 후보·변경·경로를 재확인하세요 (UNASSESSED)")
+            return
+        self.paths["requirements"].set(selected["requirements_path"])
+        self.status_text.set(f"설계도 선택: {selected['relative_path']} · 정적 검수 대기 (NOT VERIFIED)")
 
     def choose(self, key: str, folder: bool) -> None:
         selected = filedialog.askdirectory(parent=self) if folder else filedialog.askopenfilename(
