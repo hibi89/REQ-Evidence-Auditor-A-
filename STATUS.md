@@ -103,3 +103,9 @@
 - **P2-07:** manual workflow registered on `main` via approved [PR #3](https://github.com/hibi89/REQ-Evidence-Auditor-A-/pull/3); actual `workflow_dispatch` event remains NOT_RUN (connected GitHub actions lack dispatch). Existing `readonly-checkout` verified the same CLI path via push-triggered CI, but not the dispatch trigger.
 - **P2-08 / P2-09:** independent Codex technical/security and Astra UI/UX audits, Windows 11 actual GUI, hostile power-loss recovery remain NOT_RUN/UNPROVEN; no independent signoff fabricated. P2 reference **5/9 SCOPED_PASS (55.6% unweighted), 3/9 PARTIAL_PASS (04/07/08), 1/9 NOT_RUN (09)**; official weighted verification **UNASSESSED**; P1 implementation candidate 17/17 SWU and 30/30 REQ mapped (official P1 weighted UNASSESSED). No main/Production/customer data/permissions/release/backup changes.
 
+## 2026-11-19 KST — 사용자 승인 V1.1 최종설계만 추가, 기능 코드 미구현
+
+- **추가 설계:** docs/FINAL_BLUEPRINT.md §11 → docs/FINAL_BLUEPRINT_V11_SOURCE_DISCOVERY_WATCH.md. 선택한 PC 폴더 또는 공개 GitHub URL/ref에서 최종설계·코드 범위 자동 발견 → 기존 reqea.v1 정적 분석 → 사용자 opt-in 코드 변경 감시·REQ별 후보 상태 diff. 모호한 정본 STOP, 비밀·원본 보존, GitHub read-only/commit pin, 감시 기본 OFF.
+- **신규 REQ-031..040 / A-08..A-14 (7 SWU)**. V1.0 17/17 SWU 후보·30 REQ 매핑 불변, V1.1 0/7 SWU·0/10 신규 REQ 후보, 통합 **17/24 SWU 후보·30/40 REQ 매핑 후보**. 이는 공식 %가 아니며 구현/검증 공식률 **UNASSESSED**. 이번 회차 코드·국소검사·원격 조회·감시 실행·독립 감사 **NOT_RUN**.
+- V1.0 마지막 검증 SHA 30878efaa5f7ff0a6984aeafd1500d306b96ef46, Actions 44339483748 6/6 SUCCESS. 기존 P2 참조 5/9 SCOPED_PASS, 3 PARTIAL, 1 NOT_RUN 유지. 신규 V11-P2-01..05 모두 NOT_RUN.
+- 다음 실제 P1 READY: A-08 로컬 발견, A-10 GitHub URL 검증+read-only snapshot. A-09/A-11/A-12/A-13/A-14는 DAG 의존성 후. main/Production/민감·고객 업로드/권한/비공개 인증/출시 HOLD.

@@ -139,3 +139,8 @@ Date: 2026-11-18 15:44 KST. Owner: A integration lead. Product `hibi89/REQ-Evide
 - **P2-07:** manual workflow registered on `main` via approved [PR #3](https://github.com/hibi89/REQ-Evidence-Auditor-A-/pull/3); actual `workflow_dispatch` event remains NOT_RUN (connected GitHub actions lack dispatch). Existing `readonly-checkout` verified the same CLI path via push-triggered CI, but not the dispatch trigger.
 - **P2-08 / P2-09:** independent Codex technical/security and Astra UI/UX audits, Windows 11 actual GUI, hostile power-loss recovery remain NOT_RUN/UNPROVEN; no independent signoff fabricated. P2 reference **5/9 SCOPED_PASS (55.6% unweighted), 3/9 PARTIAL_PASS (04/07/08), 1/9 NOT_RUN (09)**; official weighted verification **UNASSESSED**; P1 implementation candidate 17/17 SWU and 30/30 REQ mapped (official P1 weighted UNASSESSED). No main/Production/customer data/permissions/release/backup changes.
 
+## 2026-11-19 KST — 신규 승인 V1.1 기능 구현 인수
+
+현재 임무 고정은 **REQ Evidence Auditor A**. 사용자 직접 승인으로 docs/FINAL_BLUEPRINT.md §11과 docs/FINAL_BLUEPRINT_V11_SOURCE_DISCOVERY_WATCH.md를 V1.1 확장 최종설계 정본으로 추가. **기존 30 REQ·17 SWU·reqea.v1 JSON 계약은 변경하지 않는다.** 새 REQ-031..040, 새 A-08..A-14의 수용/DAG/allowed_paths를 docs/SWU_DAG.md에서 읽고 다음 'ㄱ'에 실제 READY A-08/A-10부터 기능 수직 구현·검사·커밋한다.
+
+구현 근거: **V1.0 17/17 SWU 후보, V1.1 0/7 (10개 신규 REQ 미구현), 통합 17/24 SWU 후보**, 공식 구현·검증률 UNASSESSED. 신규 V1.1 P2 모든 게이트 NOT_RUN. 마지막 기존 V1.0 소스 검증 SHA 30878efaa5f7ff0a6984aeafd1500d306b96ef46 / GitHub Actions 44339483748 6/6 SUCCESS. 기존 P2 5/9 참조 유지. 사용자 선택 전 로컬 루트/공개 GitHub 자동 조회 금지; 감시 기본 OFF, private repo·권한·Secrets·원본/고객 외부 전송/main/Production/출시 HOLD.

@@ -1,4 +1,4 @@
-# REQ Evidence Auditor — 최종설계 V1.0 (P0 LOCKED)
+# REQ Evidence Auditor — 최종설계 V1.0 (P0 LOCKED) + V1.1 사용자 승인 확장
 **고정일:** 2026-11-18 KST · **정본:** `hibi89/REQ-Evidence-Auditor-A-` · **단계:** P0 설계 확정 / P1 미시작 / P2 잠금
 **해총 정책 기준:** `f633dcf1d3c533d2b674648e4a6515d80b85f05c` (`kmong-productization` 확인 HEAD). 이 SHA는 설계 시점 기록이며 P1 매 회차 최신 원격 HEAD와 상위 정책을 다시 확인한다.
 **권한:** 사용자 지시: REQ Evidence Auditor를 A/B/C 별도 저장소에서 병렬 개발하고 최종 A로 복사·통합. 기존 REQ Evidence Auditor의 제품 형태는 **Windows 로컬 EXE + CLI + 선택적 GitHub Actions 연계**로 확정. A가 최종 제품 정본/통합 담당. 유료·고객 원본 전송·main 병합·상용 GO 없음.
@@ -121,3 +121,11 @@ tests/{a/,b/,c/,integration/}
 
 ## 10. 설계 변경 통제
 REQ-ID, 소유권, 기본 출력과 보안 게이트 변경은 최종설계 개정 + 사용자 승인 필요. 각 GPT는 자기 브랜치에 구현하고 변경된 외부 계약이 필요하면 `CONTRACT_CHANGE_REQUEST`를 기록해 A의 결정·버전업 후에만 적용. 실험 중 분석기·근거 추적 능력이 제한되면 `UNASSESSED`로 처리하고 기능을 조용히 삭제하지 않는다.
+
+## 11. 사용자 승인 V1.1 확장: PC 폴더 자동발견 / 공개 GitHub 직접조회 / 변경 감시
+
+**추가 최종설계 정본:** [FINAL_BLUEPRINT_V11_SOURCE_DISCOVERY_WATCH.md](FINAL_BLUEPRINT_V11_SOURCE_DISCOVERY_WATCH.md) (사용자 2026-11-19 KST 승인). 모드별 전체 입력→정본 후보 발견→기존 정적 분석→동일 소스 SHA 근거→opt-in 감시·변경분 비교 및 로컬 기록의 상세 설계·안전/수용조건은 해당 문서의 REQ-031..040을 따른다.
+
+**기존 V1.0과의 범위 구분:** 위 §1·§3·§6·§9의 GitHub API 미지원·클론/상시감시 없음은 V1.0 범위다. V1.1에서는 사용자가 명시적으로 입력한 **공개 GitHub URL+선택 ref의 HTTPS 읽기 전용 조회만** 설계 승인한다. private repo 인증·토큰 관리·외부 고객/민감 데이터 전송·GitHub 권한 변경·main/Production/출시는 여전히 별도 GO. 감시 기본 OFF, 앱 종료 시 중단.
+
+**기존 30-REQ 정적 분석 오라클 및 frozen reqea.v1 계약은 변경하지 않는다.** 본 문서의 §5는 REQ-001..030만 가진다. 신규 10개 REQ는 별도 문서에 기록한다. 기존 P1 17/17 SWU 완료 후보와 기존 P2 게이트 5/9 SCOPED_PASS는 V1.0의 이력. 신규 V1.1 P1 0/7 SWU, 현재 통합 17/24 SWU 후보(공식 구현률 UNASSESSED); 신규 V11-P2-01..05 NOT_RUN. 본 설계 반영만으로 코드 구현·검증 진척은 +0.

@@ -37,3 +37,19 @@ A가 B/C 개발 완료를 기다리느라 READY인 A 코딩을 중단하지 않�
 
 ## 재시도와 상태
 SWU별 `status=READY|IN_PROGRESS|IMPLEMENTED_UNVERIFIED|ISOLATED_REDESIGN_PENDING|SOLMAX_BATCH_PENDING|BLOCKED_APPROVAL`; 실패 2회 격리, 방법 전환 2회, 누적 4회 Sol Max 배치. 실제 코드/오류/SHA가 없는 조회·문서 정리·CI 폴링은 시도로 집계하지 않는다. 반드시 다음 READY 계속. 핵심 고위험 문제는 즉시 전문 지원 요청 가능. 모든 `ㄱ` 종료 시 SWU별 경로·정확 SHA·국소 PASS/FAIL/NOT_RUN·다음 READY만 짧게 보고한다.
+
+## V1.1 확장 작업 DAG — A-08..A-14 추가, 기존 17개 SWU 불변 (2026-11-19 KST)
+
+신규 P1 7개 전부 NOT_STARTED; **현 시점 READY**는 A-08 및 A-10이며 다른 작업은 BLOCKED_DEPENDENCY. S/C/I/D/U 상세 수치는 초기 UNASSESSED, 속도 효과 UNMEASURED. Owner A 웹 GPT-6 Sol High, 기존 B/C 코드 직접 변경 금지. **문서·Mock만으로 SWU 완료 처리 금지**.
+
+| SWU | REQ | depends_on | allowed_paths | 실기능 및 핵심 실패 경로 | 초기 상태 |
+|---|---|---|---|---|---|
+| A-08 | REQ-031, REQ-032 | A-03,A-06 | src/reqea/core/discovery.py; src/reqea/gui/app.py; tests/a/** | GUI/CLI 선택 루트→bounded 후보 탐색→목록, symlink/권한오류 STOP | READY |
+| A-09 | REQ-033 | A-08 | src/reqea/core/discovery.py; src/reqea/core/selector.py; src/reqea/gui/app.py; tests/a/** | AGENTS/README/표준 경로 정본 근거/중복 탐지→사용자 선택/AMBIGUOUS 거부 | BLOCKED_DEPENDENCY |
+| A-10 | REQ-034, REQ-035 | A-03 | src/reqea/core/github_source.py; src/reqea/core/snapshot.py; src/reqea/cli.py; tests/a/** | URL+ref 검사→공개 HTTPS exact commit pin→안전 임시 snapshot, 호스트/redirect·비밀·limit 차단 | READY |
+| A-11 | REQ-036 | A-09,A-10,A-04 | src/reqea/core/snapshot.py; src/reqea/core/orchestrator.py; src/reqea/cli.py; tests/a/** | source SHA 검증/UNVERIFIED→기존 A/B/C 분석 호출→보수적 provenance 출력·ref 변경 차단 | BLOCKED_DEPENDENCY |
+| A-12 | REQ-037 | A-08,A-09,A-11 | src/reqea/core/watch.py; src/reqea/core/discovery.py; tests/a/** | 로컬 opt-in ON/OFF→안정 fingerprint→변경분만 같은 엔진 재분석, stop/잠김/중복 | BLOCKED_DEPENDENCY |
+| A-13 | REQ-038 | A-10,A-11 | src/reqea/core/watch.py; src/reqea/core/github_source.py; tests/a/** | GitHub 선택 ref 15분+ SHA polling→변경 감지 재검수, rate limit/backoff/offline stop | BLOCKED_DEPENDENCY |
+| A-14 | REQ-039, REQ-040 | A-09,A-11,A-12,A-13 | src/reqea/core/history.py; src/reqea/core/output.py; src/reqea/gui/app.py; src/reqea/cli.py; tests/a/** | SHA/REQ 상태 diff·로컬 히스토리·UI 표시와 출력·원본 불변/보안·오류/복구 | BLOCKED_DEPENDENCY |
+
+임계 DAG: A-08 → A-09 → A-11 → A-12 → A-14, 병렬 독립 A-10 → A-11 → A-13 → A-14. 사용자 승인 범위는 **공개 GitHub 읽기 전용 설계**뿐. 비공개 인증·토큰/권한 변경·원본 외부 전송은 BLOCKED_APPROVAL. V1.1 P2 V11-P2-01..05 전부 NOT_RUN. 기존 17 SWU의 REQ/수용·실패·SHA 보존.
