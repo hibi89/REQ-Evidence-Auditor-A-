@@ -50,6 +50,8 @@ class AuditorApp(tk.Tk):
         self._watch_generation = 0
         self._watch_busy = False
         self._watcher: LocalChangeWatch | PublicGitHubChangeWatch | None = None
+        self._starting_watcher: LocalChangeWatch | PublicGitHubChangeWatch | None = None
+        self._watch_commit_lock = threading.Lock()  # STOP cannot return before a delta commit
         self._watch_out = ""
         self._watch_source_root: str | None = None
         self._watch_token: str | None = None
@@ -382,6 +384,7 @@ class AuditorApp(tk.Tk):
         self._watch_generation += 1
         gen = self._watch_generation
         self._watch_busy = True
+        self._starting_watcher = watcher
         self.watch_button.state(["disabled"])
         self.status_text.set("선택 프로젝트 감시를 명시적으로 시작 중...")
         threading.Thread(target=self._watch_start_worker,
@@ -396,12 +399,21 @@ class AuditorApp(tk.Tk):
             self.events.put(("watch_start", gen, {"error": type(exc).__name__}))
 
     def stop_watch(self) -> None:
-        self._watch_generation += 1
-        current = self._watcher
-        self._watcher = None
-        self._watch_busy = False
-        if current is not None:
-            current.stop()
+        # Serialize STOP against the final local history commit. Any existing
+        # save completes before STOP returns; no new save can start afterward.
+        with self._watch_commit_lock:
+            self._watch_generation += 1
+            current = self._watcher
+            pending = self._starting_watcher
+            self._watcher = None
+            self._starting_watcher = None
+            self._watch_busy = False
+            # A worker might not have entered watcher.start() yet. An ordinary
+            # stop() alone would permit that delayed start to re-activate it.
+            if pending is not None:
+                pending.cancel_pending_start()
+            if current is not None and current is not pending:
+                current.stop()
         self.watch_button.state(["!disabled"])
         if not self._closing:
             self.status_text.set("감시 중지 · 이후 자동 GitHub 요청 없음")
@@ -427,9 +439,11 @@ class AuditorApp(tk.Tk):
                 diff = compare_audits(event["previous"], event["current"],
                                       before_snapshot=prior_token, after_snapshot=token)
                 # A user might stop the watch while a poll is running.
-                if not watcher.active or gen != self._watch_generation:
-                    return
-                saved = save_delta(diff, out_dir=out, source_root=root)
+                with self._watch_commit_lock:
+                    if (self._closing or not watcher.active
+                            or gen != self._watch_generation):
+                        return
+                    saved = save_delta(diff, out_dir=out, source_root=root)
                 event = {"status": "CHANGED", "token": token,
                          "changed_count": diff["changed_count"],
                          "saved": saved["status"]}
@@ -490,8 +504,9 @@ class AuditorApp(tk.Tk):
                         payload[0].stop()
                     continue
                 self._watch_busy = False
+                self._starting_watcher = None
                 self.watch_button.state(["!disabled"])
-                if isinstance(payload, tuple):
+                if isinstance(payload, tuple) and payload[3].get("status") == "STARTED":
                     self._watcher, self._watch_out, self._watch_source_root, data = payload
                     self._watch_token = data.get("fingerprint") or data.get("pinned_commit_sha")
                     self.status_text.set("선택한 프로젝트 감시 ON · 변경 전에는 재분석/이력 저장 없음")

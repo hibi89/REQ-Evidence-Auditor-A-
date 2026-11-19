@@ -142,6 +142,38 @@ with tempfile.TemporaryDirectory() as d:
             assert list((v11out / "reqea-history").glob("reqea-delta-*.json"))
             app.stop_watch()
             assert not watcher.active, "Stop must make subsequent polling inactive"
+            # STOP between clicking Start and worker entry must cancel
+            # pending explicit permission, not merely the active watcher.
+            with patch("reqea.gui.app.threading.Thread.start") as suppressed_launch:
+                app.start_watch()
+                pending = app._starting_watcher
+                assert pending is not None and app._watcher is None
+                suppressed_launch.assert_called_once()
+                app.stop_watch()
+                assert pending.start(now=0)["status"] == "STOPPED"
+                assert not pending.active
+                assert app._starting_watcher is None
+            # On a real running worker, a STOP between delta computation and
+            # persistence must not create additional change-history records.
+            app.start_watch()
+            pump(app, lambda: app._watcher is not None and app._watcher.active,
+                 "restart with a newly authorized watch instance")
+            watcher = app._watcher
+            prior_records = sorted((v11out / "reqea-history").glob("reqea-delta-*.json"))
+            def stop_during_compare(*args, **kwargs):
+                app.stop_watch()
+                return {"changed_count": 1}
+            with patch.object(watcher, "tick", return_value={
+                     "status": "CHANGED", "previous": prior_audit, "current": current_audit,
+                     "fingerprint": "b" * 64}), \
+                 patch("reqea.gui.app.compare_audits", side_effect=stop_during_compare), \
+                 patch("reqea.gui.app.save_delta") as write:
+                app._watch_tick_worker(app._watch_generation, watcher, str(v11out),
+                                       str(small), app._watch_token)
+                write.assert_not_called()
+            assert sorted((v11out / "reqea-history").glob("reqea-delta-*.json")) == prior_records
+            assert not watcher.active
+
             from contextlib import contextmanager
 
             @contextmanager

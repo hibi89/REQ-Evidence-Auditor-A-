@@ -97,10 +97,13 @@ class LocalChangeWatch:
         self._generation = 0
         self._state_lock = Lock()
         self._polling = False
+        self._cancel_pending_start = False
 
     def start(self, *, now: float | None = None) -> dict:
         """Explicit opt-in only; do not persist any source or automatically save."""
         with self._state_lock:
+            if self._cancel_pending_start:
+                return {"status": "STOPPED"}
             generation = self._generation
         found = discover_local_requirements(self.root)
         selected_path = Path(self.requirements)
@@ -124,7 +127,7 @@ class LocalChangeWatch:
         # STOP may arrive while the initial audit is running in another thread.
         # Commit the new monitoring state only while holding the same lock as stop().
         with self._state_lock:
-            if generation != self._generation:
+            if self._cancel_pending_start or generation != self._generation:
                 return {"status": "STOPPED"}
             self.requirements = selected["requirements_path"]
             self._baseline_doc = selected["sha256"]
@@ -136,6 +139,15 @@ class LocalChangeWatch:
             self.active = True
             return {"status": "STARTED", "audit": self._audit,
                     "fingerprint": self._fingerprint, "verification_status": "NOT_RUN"}
+
+    def cancel_pending_start(self) -> dict:
+        """Permanently cancel an in-flight GUI start, including before worker entry."""
+        with self._state_lock:
+            self._cancel_pending_start = True
+            self.active = False
+            self._generation += 1
+            self._pending = None
+        return {"status": "STOPPED"}
 
     def stop(self) -> dict:
         with self._state_lock:
@@ -235,16 +247,19 @@ class PublicGitHubChangeWatch:
         self._generation = 0
         self._state_lock = Lock()
         self._polling = False
+        self._cancel_pending_start = False
 
     def start(self, *, now: float | None = None) -> dict:
         """Explicit consent begins one pinned public snapshot analysis."""
         with self._state_lock:
+            if self._cancel_pending_start:
+                return {"status": "STOPPED"}
             generation = self._generation
         with public_github_snapshot(self.url, self.ref) as snapshot:
             selection, audit = _candidate_audit(snapshot["root"], self.requirements)
             head = snapshot["commit_sha"]
         with self._state_lock:
-            if generation != self._generation:
+            if self._cancel_pending_start or generation != self._generation:
                 return {"status": "STOPPED"}
             self._selected = selection["relative_path"]
             self._document_digest = selection["sha256"]
@@ -257,6 +272,14 @@ class PublicGitHubChangeWatch:
             return {"status": "STARTED", "repository": self.reader.owner + "/" + self.reader.repo,
                     "pinned_commit_sha": head, "source_sha": "UNVERIFIED",
                     "verification_status": "NOT_RUN", "audit": audit}
+
+    def cancel_pending_start(self) -> dict:
+        """Cancellation latch ensures a queued HTTP start cannot re-arm."""
+        with self._state_lock:
+            self._cancel_pending_start = True
+            self.active = False
+            self._generation += 1
+        return {"status": "STOPPED"}
 
     def stop(self) -> dict:
         with self._state_lock:

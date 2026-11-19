@@ -480,6 +480,44 @@ class ChangeWatchSynthetic(unittest.TestCase):
                 poll.assert_not_called()
             self.assertTrue(remote.active)
 
+    def test_gui_cancel_before_worker_start_prevents_any_local_read(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "root"
+            req = _project(root)
+            watcher = LocalChangeWatch(str(root), str(req))
+            watcher.cancel_pending_start()
+            with patch("reqea.core.watch.discover_local_requirements") as discover:
+                self.assertEqual(watcher.start(now=0)["status"], "STOPPED")
+                discover.assert_not_called()
+            self.assertFalse(watcher.active)
+
+    def test_gui_cancel_before_worker_start_prevents_any_remote_http(self):
+        watcher = PublicGitHubChangeWatch(
+            "https://github.com/o/r", "main", "requirements.md")
+        watcher.cancel_pending_start()
+        with patch("reqea.core.watch.public_github_snapshot") as snapshot:
+            self.assertEqual(watcher.start(now=0)["status"], "STOPPED")
+            snapshot.assert_not_called()
+        self.assertFalse(watcher.active)
+
+    def test_gui_cancel_during_inflight_public_start_cannot_publish(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "remote"
+            _project(root)
+            watcher = PublicGitHubChangeWatch(
+                "https://github.com/o/r", "main", "requirements.md")
+
+            @contextmanager
+            def delayed(url, ref):
+                watcher.cancel_pending_start()
+                yield {"root": str(root), "owner": "o", "repository": "r",
+                       "commit_sha": "a" * 40, "source_sha": "UNVERIFIED"}
+
+            with patch("reqea.core.watch.public_github_snapshot", side_effect=delayed):
+                self.assertEqual(watcher.start(now=0)["status"], "STOPPED")
+            self.assertIsNone(watcher._audit)
+            self.assertFalse(watcher.active)
+
     def test_remote_rate_limit_backs_off_then_stop(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d) / "public"
