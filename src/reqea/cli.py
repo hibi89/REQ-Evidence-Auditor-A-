@@ -113,7 +113,12 @@ def main(argv: list[str] | None = None) -> int:
                 _check_no_symlinks(selected)
                 if not selected.is_file() or selected.stat().st_size > 2_000_000:
                     raise ValueError("audit JSON missing or oversized")
-                return json.loads(selected.read_text(encoding="utf-8"))
+                try:
+                    return json.loads(selected.read_text(encoding="utf-8"))
+                except RecursionError:
+                    # Deeply nested but size-bounded untrusted JSON must be
+                    # reported as UNASSESSED rather than crashing the CLI.
+                    raise ValueError("audit JSON nesting exceeds safety bound") from None
             delta = compare_audits(read_report(args.before), read_report(args.after))
             stored = save_delta(delta, out_dir=args.out, source_root=args.source_root)
             print(json.dumps({"status": "CANDIDATE_DIFF_ONLY",

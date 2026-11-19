@@ -56,7 +56,10 @@ def _findings(audit: dict) -> tuple[dict[str, dict], dict]:
         if not isinstance(item, dict):
             raise ValueError("invalid REQ finding")
         req, status = item.get("req_id"), item.get("status")
-        if not isinstance(req, str) or not _REQ.fullmatch(req) or status not in _STATES:
+        # JSON permits lists/objects here; never perform a set-membership
+        # check on an unhashable value before validating its type.
+        if (not isinstance(req, str) or not _REQ.fullmatch(req)
+                or not isinstance(status, str) or status not in _STATES):
             raise ValueError("untrusted REQ ID or status")
         if req in found:
             raise ValueError("duplicate REQ ID in audit")

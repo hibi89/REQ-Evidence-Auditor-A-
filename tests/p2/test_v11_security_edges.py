@@ -229,6 +229,59 @@ class V11SecurityBoundaryTests(unittest.TestCase):
             self.assertNotIn("SECRET_DO_NOT_EXPORT",stdout.getvalue())
             self.assertNotIn("/private/",stdout.getvalue())
 
+    def test_malformed_unhashable_req_status_fails_closed_without_history(self):
+        # The CLI accepts explicit local audit JSON, which is untrusted even
+        # when well-formed JSON. List/dict statuses must not crash with
+        # TypeError or create any candidate-diff record.
+        with tempfile.TemporaryDirectory() as d:
+            base = Path(d)
+            source = base / "approved-source"
+            source.mkdir()
+            sentinel = source / "keep.py"
+            sentinel.write_bytes(b"OWNER_SOURCE_PRESERVE")
+            before, after = base / "before.json", base / "after.json"
+            out = base / "approved-output"
+            baseline = _audit("GAP_CANDIDATE")
+            before.write_text(json.dumps(baseline), encoding="utf-8")
+            for status in ([], {}, ["VERIFIED"], {"status": "VERIFIED"}, None, 0):
+                with self.subTest(status=status):
+                    malformed = _audit("CODE_CANDIDATE")
+                    malformed["findings"][0]["status"] = status
+                    with self.assertRaisesRegex(ValueError, "untrusted REQ ID or status"):
+                        compare_audits(baseline, malformed)
+                    after.write_text(json.dumps(malformed), encoding="utf-8")
+                    stdout, stderr = io.StringIO(), io.StringIO()
+                    with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                        result = main(["compare", "--before", str(before), "--after", str(after),
+                                       "--source-root", str(source), "--out", str(out)])
+                    self.assertEqual(result, 2)
+                    self.assertEqual(stdout.getvalue(), "")
+                    self.assertEqual(json.loads(stderr.getvalue()),
+                                     {"status": "UNASSESSED", "error_type": "ValueError"})
+                    self.assertFalse((out / "reqea-history").exists())
+            self.assertEqual(sentinel.read_bytes(), b"OWNER_SOURCE_PRESERVE")
+
+    def test_deeply_nested_audit_json_does_not_crash_cli_or_write_output(self):
+        with tempfile.TemporaryDirectory() as d:
+            base = Path(d)
+            source = base / "approved-source"
+            source.mkdir()
+            before, after = base / "before.json", base / "after.json"
+            out = base / "approved-output"
+            before.write_text(json.dumps(_audit("UNASSESSED")), encoding="utf-8")
+            # Valid JSON within the 2 MB file limit, but exceeds the Python
+            # parser's recursion bound. Never propagate a raw RecursionError.
+            after.write_text("[" * 1500 + "0" + "]" * 1500, encoding="utf-8")
+            stdout, stderr = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                result = main(["compare", "--before", str(before), "--after", str(after),
+                               "--source-root", str(source), "--out", str(out)])
+            self.assertEqual(result, 2)
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertEqual(json.loads(stderr.getvalue()),
+                             {"status": "UNASSESSED", "error_type": "ValueError"})
+            self.assertFalse(out.exists())
+
     def test_registered_local_project_cannot_store_metadata_inside_source(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d)/"root"
