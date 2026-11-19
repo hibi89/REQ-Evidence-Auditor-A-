@@ -126,6 +126,12 @@ with tempfile.TemporaryDirectory() as d:
             pump(app, lambda: app._watcher is not None and app._watcher.active,
                  "explicit local watch startup")
             watcher = app._watcher
+            # A 1.2-second Tk timer must not launch a Python thread for
+            # 30-second local WAIT or (for GitHub) 900-second WAIT.
+            with patch("reqea.gui.app.threading.Thread.start") as started:
+                for _ in range(5):
+                    app._watch_cycle()
+                started.assert_not_called()
             prior_audit = {"schema_version": "reqea.v1", "source_sha": "UNVERIFIED",
                            "verification_status": "NOT_RUN",
                            "findings": [{"req_id": "REQ-001", "status": "UNASSESSED"}]}

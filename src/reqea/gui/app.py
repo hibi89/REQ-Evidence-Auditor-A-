@@ -422,13 +422,18 @@ class AuditorApp(tk.Tk):
         if self._closing:
             return
         if self._watcher is not None and self._watcher.active and not self._watch_busy:
-            self._watch_busy = True
-            gen = self._watch_generation
-            watcher = self._watcher
-            threading.Thread(target=self._watch_tick_worker,
-                             args=(gen, watcher, self._watch_out,
-                                   self._watch_source_root, self._watch_token),
-                             daemon=True).start()
+            # A GUI timer is cheap; a worker/thread per 1.2-second WAIT is not.
+            # Due calculation is lock-protected, read-only and never accesses
+            # public GitHub or customer source before the configured interval.
+            due = self._watcher.seconds_until_due()
+            if due is not None and due <= 0:
+                self._watch_busy = True
+                gen = self._watch_generation
+                watcher = self._watcher
+                threading.Thread(target=self._watch_tick_worker,
+                                 args=(gen, watcher, self._watch_out,
+                                       self._watch_source_root, self._watch_token),
+                                 daemon=True).start()
         self.after(1200, self._watch_cycle)
 
     def _watch_tick_worker(self, gen, watcher, out, root, prior_token) -> None:

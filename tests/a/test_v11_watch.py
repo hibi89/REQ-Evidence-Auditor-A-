@@ -529,6 +529,66 @@ class ChangeWatchSynthetic(unittest.TestCase):
             self.assertIsNone(watcher._audit)
             self.assertFalse(watcher.active)
 
+    def test_local_due_time_skips_wait_workers_and_respects_stop(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "local"
+            req = _project(root)
+            watcher = LocalChangeWatch(str(root), str(req))
+            self.assertIsNone(watcher.seconds_until_due(now=0))
+            watcher.start(now=0)
+            self.assertEqual(watcher.seconds_until_due(now=1), 29)
+            self.assertEqual(watcher.seconds_until_due(now=29), 1)
+            self.assertEqual(watcher.seconds_until_due(now=30), 0)
+            self.assertEqual(watcher.tick(now=30)["status"], "UNCHANGED")
+            self.assertEqual(watcher.seconds_until_due(now=31), 29)
+            watcher.stop()
+            self.assertIsNone(watcher.seconds_until_due(now=1000))
+
+    def test_remote_due_time_honors_rate_limit_without_http(self):
+        from reqea.core.github_source import GitHubRateLimitError
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "remote"
+            _project(root)
+            @contextmanager
+            def snapshot(url, ref):
+                yield {"root": str(root), "owner": "o", "repository": "r",
+                       "commit_sha": "a" * 40, "source_sha": "UNVERIFIED"}
+            watcher = PublicGitHubChangeWatch(
+                "https://github.com/o/r", "main", "requirements.md")
+            self.assertIsNone(watcher.seconds_until_due(now=0))
+            with patch("reqea.core.watch.public_github_snapshot", side_effect=snapshot):
+                watcher.start(now=0)
+            self.assertEqual(watcher.seconds_until_due(now=899), 1)
+            with patch.object(watcher.reader, "head_commit_sha",
+                              side_effect=GitHubRateLimitError(7200)):
+                self.assertEqual(watcher.tick(now=900)["status"], "BACKOFF")
+            self.assertEqual(watcher.seconds_until_due(now=8099), 1)
+            self.assertEqual(watcher.seconds_until_due(now=8100), 0)
+            watcher.stop()
+            self.assertIsNone(watcher.seconds_until_due(now=100000))
+
+    def test_real_clock_rate_limit_wait_begins_after_response(self):
+        from reqea.core.github_source import GitHubRateLimitError
+        from reqea.core import watch as module
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "remote"
+            _project(root)
+            @contextmanager
+            def snapshot(url, ref):
+                yield {"root": str(root), "owner": "o", "repository": "r",
+                       "commit_sha": "a" * 40, "source_sha": "UNVERIFIED"}
+            watcher = PublicGitHubChangeWatch(
+                "https://github.com/o/r", "main", "requirements.md")
+            with patch("reqea.core.watch.public_github_snapshot", side_effect=snapshot):
+                watcher.start(now=0)
+            with patch.object(watcher.reader, "head_commit_sha",
+                              side_effect=GitHubRateLimitError(7200)):
+                with patch.object(module.time, "monotonic",
+                                  side_effect=[1000.0, 1020.0]):
+                    self.assertEqual(watcher.tick()["status"], "BACKOFF")
+            self.assertEqual(watcher.seconds_until_due(now=8219), 1)
+            self.assertEqual(watcher.seconds_until_due(now=8220), 0)
+
     def test_remote_rate_limit_backs_off_then_stop(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d) / "public"

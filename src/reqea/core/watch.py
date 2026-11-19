@@ -159,6 +159,14 @@ class LocalChangeWatch:
             self._pending = None
         return {"status": "STOPPED"}
 
+    def seconds_until_due(self, *, now: float | None = None) -> float | None:
+        """Read-only due time; no I/O or thread needed for a premature GUI poll."""
+        moment = _poll_time(now)
+        with self._state_lock:
+            if not self.active:
+                return None
+            return max(0.0, self._checked_at + self.interval - moment)
+
     def tick(self, *, now: float | None = None) -> dict:
         """One bounded poll. STOP and concurrent ticks cannot publish stale state."""
         moment = _poll_time(now)
@@ -293,6 +301,14 @@ class PublicGitHubChangeWatch:
             self._generation += 1
         return {"status": "STOPPED"}
 
+    def seconds_until_due(self, *, now: float | None = None) -> float | None:
+        """Obey GitHub backoff without spawning a WAIT worker every GUI cycle."""
+        moment = _poll_time(now)
+        with self._state_lock:
+            if not self.active:
+                return None
+            return max(0.0, self._checked_at + self._backoff - moment)
+
     def tick(self, *, now: float | None = None) -> dict:
         """No concurrent remote polling, stale state, or post-STOP promotion."""
         moment = _poll_time(now)
@@ -340,6 +356,9 @@ class PublicGitHubChangeWatch:
                     # Respect explicit GitHub Retry-After or reset deadlines.
                     hint = exc.retry_seconds if exc.retry_seconds is not None else 0.0
                     self._backoff = min(max(self._backoff * 2, self.interval, hint), 86_400.0)
+                    # Retry-After is relative to the HTTP response, not the
+                    # start of a potentially slow request. Avoid early retry.
+                    self._checked_at = _poll_time(None) if now is None else moment
                     return {"status": "BACKOFF", "retry_seconds": self._backoff}
                 self.active = False
                 self._generation += 1
