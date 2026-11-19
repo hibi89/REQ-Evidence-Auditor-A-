@@ -41,6 +41,10 @@ class AuditorApp(tk.Tk):
         self.events: queue.Queue[tuple[str, int, object]] = queue.Queue()
         self.local_discovery: dict | None = None
         self.remote_discovery: dict | None = None
+        # Explicit selection of a discovered remote canonical document,
+        # bound to the saved bookmark/output and the exact discovered SHA.
+        # It never changes the immutable registered bookmark.
+        self._accepted_registered_remote: tuple | None = None
         self.document_choice = tk.StringVar()
         self.profile_choice = tk.StringVar()
         self._profile_labels: list[str] = []
@@ -177,6 +181,7 @@ class AuditorApp(tk.Tk):
         self._discovery_cancel_event = None
         self._discovery_input_scope = None
         self.remote_discovery = None
+        self._accepted_registered_remote = None
         self.document_choice.set("")
         self.candidate_picker.configure(values=[])
         self.discover_button.state(["!disabled"])
@@ -214,6 +219,7 @@ class AuditorApp(tk.Tk):
         self._generation += 1
         self.local_discovery = None
         self.remote_discovery = None
+        self._accepted_registered_remote = None
         self.document_choice.set("")
         self.candidate_picker.configure(values=[])
         self.status_text.set("모드를 선택했습니다. 프로젝트/URL을 확인하고 설계도를 탐색하세요.")
@@ -247,6 +253,21 @@ class AuditorApp(tk.Tk):
                         raise ValueError("selected requirements outside registered root") from exc
                     resolved = select_requirements(found, relative)
                     result["requirements"] = resolved["relative_path"]
+            if result["kind"] == "github" and not result.get("requirements"):
+                state = getattr(self, "remote_discovery", None)
+                approval = getattr(self, "_accepted_registered_remote", None)
+                selected_remote = self.document_choice.get().strip()
+                if (isinstance(state, dict) and approval is not None
+                        and state.get("url") == result["source"]
+                        and state.get("ref") == result.get("ref")
+                        and state.get("status") in ("SINGLE_CANDIDATE", "AMBIGUOUS")):
+                    matches = [item for item in state.get("candidates", [])
+                               if isinstance(item, dict) and item.get("path") == selected_remote]
+                    if (len(matches) == 1 and approval ==
+                            (choice, self.paths["out"].get().strip(), result["source"],
+                             result.get("ref"), selected_remote, state.get("commit_sha"),
+                             matches[0].get("sha256"))):
+                        result["requirements"] = selected_remote
             return result
         if mode == "local":
             root = self.paths["repo"].get().strip()
@@ -282,6 +303,7 @@ class AuditorApp(tk.Tk):
         gen = self._generation
         self.local_discovery = None
         self.remote_discovery = None
+        self._accepted_registered_remote = None
         self.document_choice.set("")
         self.candidate_picker.configure(values=[])
         self.paths["requirements"].set("" if target["kind"] == "local" else self.paths["requirements"].get())
@@ -366,6 +388,13 @@ class AuditorApp(tk.Tk):
                 candidate not in {c["path"] for c in self.remote_discovery["candidates"]}):
             self.status_text.set("원격 정본 선택 불가 · GitHub 설계도 재탐색 필요")
             return
+        if self.mode.get() == "registered":
+            match = next(c for c in self.remote_discovery["candidates"]
+                         if c["path"] == candidate)
+            self._accepted_registered_remote = (
+                self.profile_choice.get(), self.paths["out"].get().strip(),
+                target["source"], target.get("ref"), candidate,
+                self.remote_discovery["commit_sha"], match["sha256"])
         self.status_text.set(f"공개 GitHub 정본: {candidate} · 검수 실행 대기 (NOT VERIFIED)")
 
     def _render_and_save(self, audit: dict, root: str, out: str,
@@ -532,7 +561,17 @@ class AuditorApp(tk.Tk):
                 source_root = target["source"]
             else:
                 chosen = self.document_choice.get().strip() if self.mode.get() == "github" else target.get("requirements")
-                watcher = PublicGitHubChangeWatch(target["source"], target.get("ref"), chosen or None)
+                expected_sha = None
+                approval = self._accepted_registered_remote
+                if (self.mode.get() == "registered" and approval is not None
+                        and chosen == approval[4]
+                        and self.remote_discovery is not None):
+                    # _source() revalidated approval against this exact
+                    # output folder, profile, ref, discovery SHA and document.
+                    expected_sha = approval[6]
+                watcher = PublicGitHubChangeWatch(
+                    target["source"], target.get("ref"), chosen or None,
+                    expected_document_sha=expected_sha)
                 source_root = None
         except (ValueError, OSError, UnicodeError):
             self.status_text.set("감시 시작 거부 · 선택한 정본/결과 폴더/소스 확인")

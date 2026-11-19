@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import re
 from pathlib import Path
 from threading import Lock
 import time
@@ -247,13 +248,19 @@ class PublicGitHubChangeWatch:
 
     def __init__(self, url: str, ref: str | None = None,
                  requirements: str | None = None, *,
-                 interval_seconds: float = _MIN_GITHUB_SECONDS):
+                 interval_seconds: float = _MIN_GITHUB_SECONDS,
+                 expected_document_sha: str | None = None):
         if not _valid_duration(interval_seconds, _MIN_GITHUB_SECONDS):
             raise ValueError("GitHub poll interval must be at least 900 seconds")
+        if (expected_document_sha is not None and
+                (not isinstance(expected_document_sha, str) or
+                 re.fullmatch(r"[0-9a-f]{64}", expected_document_sha) is None)):
+            raise ValueError("invalid explicitly approved canonical document SHA")
         self.reader = PublicGitHubReader(url, ref)
         self.url = url
         self.ref = self.reader.requested_ref
         self.requirements = requirements
+        self.expected_document_sha = expected_document_sha
         self.interval = float(interval_seconds)
         self.active = False
         self._head: str | None = None
@@ -285,6 +292,9 @@ class PublicGitHubChangeWatch:
                                         before_request=ensure_not_cancelled) as snapshot:
                 ensure_not_cancelled()
                 selection, audit = _candidate_audit(snapshot["root"], self.requirements)
+                if (self.expected_document_sha is not None
+                        and selection["sha256"] != self.expected_document_sha):
+                    raise ValueError("approved remote canonical document changed since discovery")
                 head = snapshot["commit_sha"]
         except ValueError:
             # An explicitly cancelled start preserves the old public STOPPED

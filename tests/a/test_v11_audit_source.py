@@ -277,6 +277,60 @@ class CallerToCalleeSourceAudit(unittest.TestCase):
                 fake._source()
             self.assertFalse((base / "other-output").exists())
 
+    def test_registered_remote_without_doc_requires_explicit_candidate_acceptance(self):
+        from types import SimpleNamespace
+        from reqea.gui.app import AuditorApp
+        from reqea.core.history import register_project, load_projects
+
+        class Var:
+            def __init__(self, value=""):
+                self.value = value
+            def get(self):
+                return self.value
+            def set(self, value):
+                self.value = value
+
+        with tempfile.TemporaryDirectory() as d:
+            base = Path(d)
+            out = base / "approved"
+            profile = {"kind": "github", "source": "https://github.com/example/example",
+                       "ref": "main", "requirements": None}
+            created = register_project(profile, out_dir=str(out))
+            original = Path(created["file"]).read_bytes()
+            label = "1. github saved"
+            sha = "b" * 64
+            state = {"url": profile["source"], "ref": profile["ref"],
+                     "commit_sha": "a" * 40, "status": "AMBIGUOUS",
+                     "candidates": [
+                         {"path": "docs/first.md", "sha256": sha},
+                         {"path": "docs/second.md", "sha256": "c" * 64}]}
+            fake = SimpleNamespace(
+                mode=Var("registered"), paths={"out": Var(str(out))},
+                profile_choice=Var(label), document_choice=Var("docs/first.md"),
+                _profiles=load_projects(out_dir=str(out)),
+                _profile_labels=[label], remote_discovery=state,
+                _accepted_registered_remote=None, status_text=Var(""))
+            fake._source = lambda: AuditorApp._source(fake)
+            self.assertIsNone(fake._source()["requirements"],
+                              "merely highlighting a candidate cannot authorize analysis")
+            AuditorApp.accept_discovered_document(fake)
+            self.assertEqual(fake._source()["requirements"], "docs/first.md")
+            self.assertEqual(Path(created["file"]).read_bytes(), original)
+            self.assertIsNone(load_projects(out_dir=str(out))[0]["requirements"])
+            fake.document_choice.set("docs/second.md")
+            self.assertIsNone(fake._source()["requirements"],
+                              "another unaccepted candidate cannot inherit consent")
+            fake.document_choice.set("docs/first.md")
+            state["commit_sha"] = "d" * 40
+            self.assertIsNone(fake._source()["requirements"],
+                              "newly discovered commit requires explicit reacceptance")
+            state["commit_sha"] = "a" * 40
+            fake.paths["out"].set(str(base / "foreign-output"))
+            with self.assertRaisesRegex(ValueError, "saved project registry changed"):
+                fake._source()
+            self.assertFalse((base / "foreign-output").exists())
+            self.assertEqual(Path(created["file"]).read_bytes(), original)
+
     def test_ref_on_local_root_and_output_inside_source_rejected(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d) / "repo"

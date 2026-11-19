@@ -249,6 +249,56 @@ with tempfile.TemporaryDirectory() as d:
                 pump(app, lambda: "저장:" in app.status_text.get()
                      and app.start_button.instate(["!disabled"]), "GUI public GitHub source audit")
             assert (v11out / "manifest.json").is_file()
+            # Register a public source before choosing its requirements
+            # document. The GUI must bind an explicit discovered candidate to
+            # registered audit+watch without changing the existing bookmark.
+            app.mode.set("github")
+            app.remote_url.set("https://github.com/example/example")
+            app.remote_ref.set("main")
+            app.document_choice.set("")
+            app.register_selected_project()
+            remote_index = next((i for i, p in enumerate(app._profiles)
+                                 if p["kind"] == "github" and p["requirements"] is None),
+                                None)
+            assert remote_index is not None, "remote register-first bookmark missing"
+            app.mode.set("registered")
+            app.profile_choice.set(app._profile_labels[remote_index])
+            app.document_choice.set("")
+            @contextmanager
+            def registered_snapshot(url, ref=None, *, before_request=None):
+                assert url == "https://github.com/example/example"
+                assert ref in ("main", "a" * 40)
+                if before_request is not None:
+                    before_request()
+                yield {"root": str(small), "owner": "example",
+                       "repository": "example", "commit_sha": "a" * 40,
+                       "tree_sha": "b" * 40, "source_sha": "UNVERIFIED"}
+            with patch("reqea.gui.app.public_github_snapshot",
+                       side_effect=registered_snapshot), \
+                 patch("reqea.core.watch.public_github_snapshot",
+                       side_effect=registered_snapshot):
+                app.discover_documents()
+                pump(app, lambda: app.remote_discovery is not None and
+                     "공개 GitHub 정본:" in app.status_text.get(),
+                     "registered public canonical discovery")
+                assert app._source()["requirements"] == "requirements.md"
+                app.start_audit()
+                pump(app, lambda: "저장:" in app.status_text.get()
+                     and app.start_button.instate(["!disabled"]),
+                     "registered public pinned audit")
+                app.start_watch()
+                pump(app, lambda: app._watcher is not None and app._watcher.active,
+                     "registered public explicit watch")
+                assert app._watcher.expected_document_sha is not None
+                app.stop_watch()
+            from reqea.core.history import load_projects
+            assert any(p["kind"] == "github" and p["requirements"] is None
+                       for p in load_projects(out_dir=str(v11out))), (
+                "remote register-first bookmark must remain immutable")
+            app.mode.set("github")
+            app.remote_url.set("https://github.com/example/example")
+            app.remote_ref.set("main")
+            app.document_choice.set("requirements.md")
             # Changing a GitHub ref while its start worker has not run must
             # revoke permission before the first network request.
             with patch("reqea.gui.app.threading.Thread.start") as queued:

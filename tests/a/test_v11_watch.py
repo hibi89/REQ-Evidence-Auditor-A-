@@ -826,6 +826,44 @@ class ChangeWatchSynthetic(unittest.TestCase):
             self.assertTrue(watcher.active)
             self.assertEqual(watcher.seconds_until_due(now=6300), 0)
 
+    def test_remote_start_rejects_changed_discovered_canonical_sha(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "mock-public"
+            req = _project(root)
+            expected = hashlib.sha256(req.read_bytes()).hexdigest()
+
+            @contextmanager
+            def snapshot(url, ref, *, before_request=None):
+                if before_request is not None:
+                    before_request()
+                yield {"root": str(root), "owner": "o", "repository": "r",
+                       "commit_sha": "a" * 40, "source_sha": "UNVERIFIED"}
+
+            watch = PublicGitHubChangeWatch(
+                "https://github.com/o/r", "main", "requirements.md",
+                expected_document_sha=expected)
+            with patch("reqea.core.watch.public_github_snapshot", side_effect=snapshot):
+                self.assertEqual(watch.start(now=0)["status"], "STARTED")
+            self.assertTrue(watch.active)
+            watch.stop()
+
+            req.write_text("# REQ-001 changed\nAcceptance criteria:\n- changed\n",
+                           encoding="utf-8")
+            stale = PublicGitHubChangeWatch(
+                "https://github.com/o/r", "main", "requirements.md",
+                expected_document_sha=expected)
+            with patch("reqea.core.watch.public_github_snapshot", side_effect=snapshot):
+                with self.assertRaisesRegex(ValueError, "changed since discovery"):
+                    stale.start(now=0)
+            self.assertFalse(stale.active)
+            self.assertIsNone(stale._audit)
+            for invalid in ("not-a-sha", "D" * 64, [], 0):
+                with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                    PublicGitHubChangeWatch("https://github.com/o/r", "main",
+                                             "requirements.md",
+                                             expected_document_sha=invalid)
+
     def test_remote_rate_limit_backs_off_then_stop(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d) / "public"
