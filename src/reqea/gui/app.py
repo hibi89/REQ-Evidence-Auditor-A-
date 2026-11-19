@@ -196,6 +196,17 @@ class AuditorApp(tk.Tk):
         # Audit, discovery and watch have independent cancellation authorities.
         # If any candidate selection or its binding changes, returning to an
         # earlier combobox value must NOT silently restore previous consent.
+        # A registered remote bookmark with no saved canonical document
+        # grants in-session approval only for the CURRENT picker/output scope.
+        # Without revocation, selecting a different candidate and returning
+        # would resurrect a previously accepted ambiguous document.
+        registered = self._accepted_registered_remote
+        if registered is not None and (
+                self.mode.get() != "registered"
+                or self.profile_choice.get() != registered[0]
+                or self.paths["out"].get().strip() != registered[1]
+                or self.document_choice.get().strip() != registered[4]):
+            self._accepted_registered_remote = None
         accepted = self._accepted_remote
         if accepted is not None and (self.mode.get(), self.remote_url.get().strip(),
                 self.remote_ref.get().strip(), self.document_choice.get().strip(),

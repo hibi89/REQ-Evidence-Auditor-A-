@@ -309,7 +309,9 @@ class CallerToCalleeSourceAudit(unittest.TestCase):
                 profile_choice=Var(label), document_choice=Var("docs/first.md"),
                 _profiles=load_projects(out_dir=str(out)),
                 _profile_labels=[label], remote_discovery=state,
-                _accepted_registered_remote=None, status_text=Var(""))
+                _accepted_registered_remote=None, _accepted_remote=None,
+                _audit_cancel_event=None, _watch_input_scope=None,
+                _discovering=False, _closing=False, status_text=Var(""))
             fake._source = lambda: AuditorApp._source(fake)
             self.assertIsNone(fake._source()["requirements"],
                               "merely highlighting a candidate cannot authorize analysis")
@@ -318,16 +320,27 @@ class CallerToCalleeSourceAudit(unittest.TestCase):
             self.assertEqual(Path(created["file"]).read_bytes(), original)
             self.assertIsNone(load_projects(out_dir=str(out))[0]["requirements"])
             fake.document_choice.set("docs/second.md")
+            AuditorApp._on_watch_input_changed(fake)
             self.assertIsNone(fake._source()["requirements"],
                               "another unaccepted candidate cannot inherit consent")
             fake.document_choice.set("docs/first.md")
+            AuditorApp._on_watch_input_changed(fake)
+            self.assertIsNone(fake._source()["requirements"],
+                              "returning to the old picker value cannot resurrect consent")
+            AuditorApp.accept_discovered_document(fake)
+            self.assertEqual(fake._source()["requirements"], "docs/first.md")
             state["commit_sha"] = "d" * 40
             self.assertIsNone(fake._source()["requirements"],
                               "newly discovered commit requires explicit reacceptance")
             state["commit_sha"] = "a" * 40
             fake.paths["out"].set(str(base / "foreign-output"))
+            AuditorApp._on_watch_input_changed(fake)
             with self.assertRaisesRegex(ValueError, "saved project registry changed"):
                 fake._source()
+            fake.paths["out"].set(str(out))
+            AuditorApp._on_watch_input_changed(fake)
+            self.assertIsNone(fake._source()["requirements"],
+                              "returning to old output must require a new acceptance")
             self.assertFalse((base / "foreign-output").exists())
             self.assertEqual(Path(created["file"]).read_bytes(), original)
 
