@@ -40,17 +40,17 @@ SWU별 `status=READY|IN_PROGRESS|IMPLEMENTED_UNVERIFIED|ISOLATED_REDESIGN_PENDIN
 
 ## V1.1 확장 작업 DAG — A-08..A-14 추가, 기존 17개 SWU 불변 (2026-11-19 KST)
 
-신규 P1 7개 전부 NOT_STARTED; **현 시점 READY**는 A-08 및 A-10이며 다른 작업은 BLOCKED_DEPENDENCY. S/C/I/D/U 상세 수치는 초기 UNASSESSED, 속도 효과 UNMEASURED. Owner A 웹 GPT-6 Sol High, 기존 B/C 코드 직접 변경 금지. **문서·Mock만으로 SWU 완료 처리 금지**.
+초기 P0의 신규 7개 NOT_STARTED 및 A-08/A-10 READY는 역사 기록. 최신 5ebb1ae16c032e35a5444ae13d653c36ae1f56cc 기준 신규 7/7 IMPLEMENTED_UNVERIFIED 후보로 갱신됨. S/C/I/D/U 상세 수치는 초기 UNASSESSED, 속도 효과 UNMEASURED. Owner A 웹 GPT-6 Sol High, 기존 B/C 코드 직접 변경 금지. **문서·Mock만으로 SWU 완료 처리 금지**.
 
 | SWU | REQ | depends_on | allowed_paths | 실기능 및 핵심 실패 경로 | 초기 상태 |
 |---|---|---|---|---|---|
-| A-08 | REQ-031, REQ-032 | A-03,A-06 | src/reqea/core/discovery.py; src/reqea/gui/app.py; tests/a/** | GUI/CLI 선택 루트→bounded 후보 탐색→목록, symlink/권한오류 STOP | READY |
-| A-09 | REQ-033 | A-08 | src/reqea/core/discovery.py; src/reqea/core/selector.py; src/reqea/gui/app.py; tests/a/** | AGENTS/README/표준 경로 정본 근거/중복 탐지→사용자 선택/AMBIGUOUS 거부 | BLOCKED_DEPENDENCY |
-| A-10 | REQ-034, REQ-035 | A-03 | src/reqea/core/github_source.py; src/reqea/core/snapshot.py; src/reqea/cli.py; tests/a/** | URL+ref 검사→공개 HTTPS exact commit pin→안전 임시 snapshot, 호스트/redirect·비밀·limit 차단 | READY |
-| A-11 | REQ-036 | A-09,A-10,A-04 | src/reqea/core/snapshot.py; src/reqea/core/orchestrator.py; src/reqea/cli.py; tests/a/** | source SHA 검증/UNVERIFIED→기존 A/B/C 분석 호출→보수적 provenance 출력·ref 변경 차단 | BLOCKED_DEPENDENCY |
-| A-12 | REQ-037 | A-08,A-09,A-11 | src/reqea/core/watch.py; src/reqea/core/discovery.py; tests/a/** | 로컬 opt-in ON/OFF→안정 fingerprint→변경분만 같은 엔진 재분석, stop/잠김/중복 | BLOCKED_DEPENDENCY |
-| A-13 | REQ-038 | A-10,A-11 | src/reqea/core/watch.py; src/reqea/core/github_source.py; tests/a/** | GitHub 선택 ref 15분+ SHA polling→변경 감지 재검수, rate limit/backoff/offline stop | BLOCKED_DEPENDENCY |
-| A-14 | REQ-039, REQ-040 | A-09,A-11,A-12,A-13 | src/reqea/core/history.py; src/reqea/core/output.py; src/reqea/gui/app.py; src/reqea/cli.py; tests/a/** | SHA/REQ 상태 diff·로컬 히스토리·UI 표시와 출력·원본 불변/보안·오류/복구 | BLOCKED_DEPENDENCY |
+| A-08 | REQ-031, REQ-032 | A-03,A-06 | src/reqea/core/discovery.py; src/reqea/gui/app.py; tests/a/** | GUI/CLI 선택 루트→bounded 후보 탐색→목록, symlink/권한오류 STOP | IMPLEMENTED_UNVERIFIED |
+| A-09 | REQ-033 | A-08 | src/reqea/core/discovery.py; src/reqea/core/selector.py; src/reqea/gui/app.py; tests/a/** | AGENTS/README/표준 경로 정본 근거/중복 탐지→사용자 선택/AMBIGUOUS 거부 | IMPLEMENTED_UNVERIFIED |
+| A-10 | REQ-034, REQ-035 | A-03 | src/reqea/core/github_source.py; src/reqea/core/snapshot.py; src/reqea/cli.py; tests/a/** | URL+ref 검사→공개 HTTPS exact commit pin→안전 임시 snapshot, 호스트/redirect·비밀·limit 차단 | IMPLEMENTED_UNVERIFIED |
+| A-11 | REQ-036 | A-09,A-10,A-04 | src/reqea/core/snapshot.py; src/reqea/core/orchestrator.py; src/reqea/cli.py; tests/a/** | source SHA 검증/UNVERIFIED→기존 A/B/C 분석 호출→보수적 provenance 출력·ref 변경 차단 | IMPLEMENTED_UNVERIFIED |
+| A-12 | REQ-037 | A-08,A-09,A-11 | src/reqea/core/watch.py; src/reqea/core/discovery.py; tests/a/** | 로컬 opt-in ON/OFF→안정 fingerprint→변경분만 같은 엔진 재분석, stop/잠김/중복 | IMPLEMENTED_UNVERIFIED |
+| A-13 | REQ-038 | A-10,A-11 | src/reqea/core/watch.py; src/reqea/core/github_source.py; tests/a/** | GitHub 선택 ref 15분+ SHA polling→변경 감지 재검수, rate limit/backoff/offline stop | IMPLEMENTED_UNVERIFIED |
+| A-14 | REQ-039, REQ-040 | A-09,A-11,A-12,A-13 | src/reqea/core/history.py; src/reqea/core/output.py; src/reqea/gui/app.py; src/reqea/cli.py; tests/a/** | SHA/REQ 상태 diff·로컬 히스토리·UI 표시와 출력·원본 불변/보안·오류/복구 | IMPLEMENTED_UNVERIFIED |
 
 임계 DAG: A-08 → A-09 → A-11 → A-12 → A-14, 병렬 독립 A-10 → A-11 → A-13 → A-14. 사용자 승인 범위는 **공개 GitHub 읽기 전용 설계**뿐. 비공개 인증·토큰/권한 변경·원본 외부 전송은 BLOCKED_APPROVAL. V1.1 P2 V11-P2-01..05 전부 NOT_RUN. 기존 17 SWU의 REQ/수용·실패·SHA 보존.
 
@@ -61,3 +61,6 @@ SWU별 `status=READY|IN_PROGRESS|IMPLEMENTED_UNVERIFIED|ISOLATED_REDESIGN_PENDIN
 - **READY:** A-14 (REQ-039/040 history/diff, registered-project/GitHub GUI selection, Start/Stop watch UI, persisted local-only delta reports). REQ-031 partial until A-14 UI; V11-P2-01..05 NOT_RUN.
 - Baseline 17 SWU candidates + 6 newly implemented candidates = 23/24 code-candidate count, official weighted implementation UNASSESSED. No fake P2 verified completion. Respect allowed_paths and retained A/B/C contract. No unapproved main/Production/credential/customer source changes.
 
+## 최신 V1.1 SWU 인수(2026-11-19 KST)
+- A-08,A-09,A-10,A-11,A-12,A-13,A-14 전부 IMPLEMENTED_UNVERIFIED 코드 후보. 신규 7/7, 기존 17/17, 통합 24/24. 정확 소스 SHA 5ebb1ae16c032e35a5444ae13d653c36ae1f56cc, CI #44483359171 6/6 SUCCESS. 기존 작업 ID·의존성·REQ·권한과 수용조건 보존.
+- 신규 검증 V11-P2-01..05는 NOT_RUN. P1 잔여 READY 없음; 다음 단계 P2 실제 시나리오, 독립 감사와 Windows11 사용자 수용. 공식 가중 구현·검증률 UNASSESSED.

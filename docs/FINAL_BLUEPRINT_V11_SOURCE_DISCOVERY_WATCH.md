@@ -1,6 +1,6 @@
 # REQ Evidence Auditor V1.1 — 로컬 자동탐색 · GitHub 직접조회 · 변경 자동 재검수
 
-**승인:** 사용자 2026-11-19 KST “그렇게 반영해놔라 최종설계도”. **정본:** docs/FINAL_BLUEPRINT.md §11 및 본 확장 문서. **상태:** P0 설계 승인, 신규 기능 P1 미구현/검증 NOT_RUN. **저장소:** hibi89/REQ-Evidence-Auditor-A- / integration/reqea-p1-20261118.
+**승인:** 사용자 2026-11-19 KST “그렇게 반영해놔라 최종설계도”. **정본:** docs/FINAL_BLUEPRINT.md §11 및 본 확장 문서. **상태:** P0 승인 → P1 신규 7/7 SWU 코드 구현 후보(5ebb1ae16c032e35a5444ae13d653c36ae1f56cc, CI #44483359171 6/6 SUCCESS), V1.1 전체 P2 NOT_RUN. **저장소:** hibi89/REQ-Evidence-Auditor-A- / integration/reqea-p1-20261118.
 
 ## 0. 변경 경계와 버전 전략
 
@@ -15,7 +15,7 @@
 3. **읽기 전용 검수:** 선택한 정본과 같은 로컬/고정 원격 스냅샷의 코드에 기존 reqea.v1 엔진을 적용한다. audit.json / report.html / manifest.json은 종전 안전 계약을 그대로 따른다. 근거 발견은 CODE_CANDIDATE이지 자동 VERIFIED가 아니다.
 4. **변경 감시:** 사용자가 등록 프로젝트에서 명시적으로 [감시 켜기]를 누른 경우만 앱 실행 중 변경 탐지. 안정된 새 지문/commit SHA가 있고 정본이 동일할 때만 재검수, 이전/현재 후보 판정 차이와 오류를 표시. [일시정지][감시 종료][기록 열기] 제공. 기본 OFF, 종료 시 중단. 상시 클라우드/백그라운드 서비스 자동 생성 금지.
 
-## 2. 추가 요구사항 10개 (P1 모두 NOT_STARTED)
+## 2. 추가 요구사항 10개 (초기 P0 설계 시 NOT_STARTED; 최신 P1 후보 7/7)
 
 | ID | 수용조건 (정상 및 핵심 오류 경로) | owner |
 |---|---|---|
@@ -79,3 +79,7 @@ Watch ON → A local_fingerprint | A github_ref_poll
 | V11-P2-05 | Windows 11 실제 GUI/EXE 및 독립 Codex 보안·Astra UX 감사/High 인수 | NOT_RUN |
 
 **진행 순서:** docs/SWU_DAG.md의 신규 A-08..A-14 DAG. P1 최초 READY A-08(로컬 탐색), A-10(GitHub 허용 URL/안전 수집). A-09 정본선택, A-11 provenance 접합, A-12/13 감시, A-14 UI/CLI diff·출력 수직 통합. 무료/로컬·읽기 전용 기본, 기존 기능 축소·main merge·Production·출시·고객 데이터 외부 전송·권한 변경은 별도 사용자 GO.
+
+## 8. 현재 구현·검증 증거
+- 5ebb1ae16c032e35a5444ae13d653c36ae1f56cc / https://github.com/hibi89/REQ-Evidence-Auditor-A-/actions/runs/44483359171: P1 신규 A-08..A-14 7/7 코드 후보, legacy V1.0 17/17 유지. UI/CLI·watch·delta/registered project 실제 호출 경로 및 필수 합성 검사 PASS.
+- V11-P2-01..05 전체 NOT_RUN; 실공개 GitHub 통신·실Windows11·장시간 내구성·독립 Codex/Astra 감사 미실행. 공식 구현/검증률 UNASSESSED, 출시 HOLD.
